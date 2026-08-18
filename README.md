@@ -56,6 +56,24 @@ npm run dev:web
 
 打开 http://localhost:5173 。
 
+### Local Relay Multiplayer Development
+
+需要真实多浏览器联机时，先启动 Relay，再启动前端：
+
+Terminal A：
+
+```bash
+npm run dev:relay
+```
+
+Terminal B：
+
+```bash
+npm run dev:web
+```
+
+然后打开 `http://localhost:5173` 创建房间，并用另一个浏览器/无痕窗口加入。
+
 ### Run Tests
 
 ```bash
@@ -77,9 +95,9 @@ packages/web-client/dist/
 
 该目录可直接交给任意静态 HTTP Server / Vercel / Cloudflare Pages / GitHub Pages / Nginx 托管。
 
-### Real Multiplayer (P2P)
+### Browser Multiplayer (WebSocket Relay)
 
-当前已经支持真实浏览器 P2P 联机：
+当前生产联机使用轻量 WebSocket Relay，不再依赖 WebRTC/STUN/TURN 穿透：
 
 1. 房主打开公网地址并创建房间。
 2. 获得邀请链接 `https://域名/?room=AB7K2P`。
@@ -87,10 +105,11 @@ packages/web-client/dist/
 4. 5–10 人进入同一 Lobby，全员 Ready 后由房主开始游戏。
 5. 每个玩家只看到自己的身份、手牌、水晶与私人信息。
 
-- 房主浏览器是 authoritative host，持有完整 GameState。
+- 房主浏览器是 authoritative host，持有完整 GameState 与唯一 GameEngine。
 - 普通玩家只发送命令，并接收自己的 PlayerView。
-- 通信层通过 `packages/p2p-network` 抽象，支持 LocalTransport 与 WebRTC Transport。
-- 公网部署使用自托管 PeerJS Signaling，Nginx 代理 `/peerjs`。
+- Relay 只负责转发消息，不运行 GameEngine、不理解游戏规则。
+- 通信层通过 `packages/p2p-network` 抽象，支持 LocalTransport、WebSocket Relay Transport，以及 WebRTC fallback。
+- 生产环境使用 Nginx 代理 `/relay` 到本机 `127.0.0.1:9001`。
 - 详见 `docs/P2P_NETWORKING.md`。
 
 ### Local Multiplayer Simulation (Debug Only)
@@ -108,17 +127,18 @@ http://localhost:5173/?debug=1
 
 正常生产 UI 不显示“添加模拟玩家”和“切换查看玩家”。
 
-### P2P Architecture
+### Network Architecture
 
 - 房主浏览器作为 authoritative host 持有完整 GameState。
 - 普通玩家只发送命令，并接收自己的 PlayerView。
-- 通信层通过 `packages/p2p-network` 抽象，支持 LocalTransport 与 WebRTC Transport。
-- 公网部署使用自托管 PeerJS Signaling，不依赖我们维护游戏后端。
+- 通信层通过 `packages/p2p-network` 抽象，支持 LocalTransport、WebSocket Relay Transport 与 WebRTC fallback。
+- 生产默认使用 WebSocket Relay，浏览器直接连接 `/relay`。
+- 调试时可通过 `?transport=webrtc` 显式切回旧 WebRTC/PeerJS。
 - 详见 `docs/P2P_NETWORKING.md`。
 
 ### Known MVP Limitations
 
 - 房主浏览器必须保持在线；房主离开则当前房间结束。
 - 不提供 Host Migration、账号系统、数据库、专用游戏服务器。
-- 当前已实现真实 WebRTC P2P 联机主流程。
-- 复杂断线重连与 TURN 配置暂未完成；部分极端 NAT 网络可能无法 P2P 直连。
+- Relay 为单实例、内存房间；服务器重启会清空当前网络房间。
+- 游戏中暂不支持完整断线重连。
