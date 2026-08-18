@@ -32,6 +32,15 @@ export interface ClientRoundView {
     playerMap: Record<string, Card> | null;
     shuffled: boolean;
   } | null;
+  resolution: {
+    hasBloodBlade: boolean;
+    hasWhiteRose: boolean;
+    budCount: number;
+    sacrificePile: Card[];
+    deathPile: Card[];
+    bladePile: Card[];
+    whiteRoseSafe: boolean;
+  } | null;
 }
 
 export interface ClientView {
@@ -90,6 +99,17 @@ const toRoundView = (round: NonNullable<GameState['round']>): ClientRoundView =>
           cards: [...round.reveal.cards],
           playerMap: round.reveal.playerMap ? { ...round.reveal.playerMap } : null,
           shuffled: round.reveal.shuffled,
+        }
+      : null,
+    resolution: round.resolution
+      ? {
+          hasBloodBlade: round.resolution.hasBloodBlade,
+          hasWhiteRose: round.resolution.hasWhiteRose,
+          budCount: round.resolution.budCount,
+          sacrificePile: [...round.resolution.sacrificePile],
+          deathPile: [...round.resolution.deathPile],
+          bladePile: [...round.resolution.bladePile],
+          whiteRoseSafe: round.resolution.whiteRoseSafe,
         }
       : null,
   };

@@ -167,6 +167,67 @@ export class HostGameController {
     return this.room.players.length > 0 && this.identityConfirmed.size >= this.room.players.length;
   }
 
+  get currentPlayerId(): string | null {
+    if (!this.gameState?.round || this.gameState.phase !== 'PLAYER_ACTIONS') {
+      return null;
+    }
+    return this.gameState.round.actionOrder[this.gameState.round.currentActionIndex] ?? null;
+  }
+
+  canPass(playerId: string): boolean {
+    if (!this.gameState?.round || this.gameState.phase !== 'PLAYER_ACTIONS') {
+      return false;
+    }
+    const round = this.gameState.round;
+    const player = this.gameState.players.find((p) => p.id === playerId);
+    if (!player) return false;
+    if (round.forcedPlay.includes(playerId) && player.hand.length > 0) return false;
+    if (
+      (round.randomForcedLeft === playerId || round.randomForcedRight === playerId ||
+        round.magic8Neighbors?.leftId === playerId || round.magic8Neighbors?.rightId === playerId) &&
+      player.hand.length > 0
+    ) {
+      return false;
+    }
+    if (round.magic5Constraint?.laterId === playerId) {
+      const earlier = round.actions[round.magic5Constraint.earlierId];
+      return earlier?.type === 'PASS';
+    }
+    return true;
+  }
+
+  isRandomForced(playerId: string): boolean {
+    if (!this.gameState?.round || this.gameState.phase !== 'PLAYER_ACTIONS') {
+      return false;
+    }
+    const round = this.gameState.round;
+    return (
+      round.randomForcedLeft === playerId ||
+      round.randomForcedRight === playerId ||
+      round.magic8Neighbors?.leftId === playerId ||
+      round.magic8Neighbors?.rightId === playerId
+    );
+  }
+
+  getPendingMagic10() {
+    return this.gameState?.round?.pendingMagic10 ?? null;
+  }
+
+  getGameOverSnapshot() {
+    if (!this.gameState) return null;
+    return {
+      winner: this.gameState.winner,
+      winReason: this.gameState.winReason,
+      players: this.gameState.players.map((p) => ({
+        id: p.id,
+        nickname: p.nickname,
+        role: p.role,
+        faction: p.faction,
+        hand: [...p.hand],
+      })),
+    };
+  }
+
   handleCommand(command: GameCommand): void {
     if (!this.engine || !this.gameState) {
       if (command.type === 'READY') {
