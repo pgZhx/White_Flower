@@ -12,6 +12,16 @@ interface LobbyScreenProps {
   onLeave: () => void;
 }
 
+const getInviteUrl = (roomId: string): string => {
+  if (typeof window === 'undefined') return `/?room=${roomId}`;
+  return `${window.location.origin}/?room=${roomId}`;
+};
+
+const isLocalhost = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  return ['localhost', '127.0.0.1'].includes(window.location.hostname);
+};
+
 export function LobbyScreen({
   roomId,
   nickname,
@@ -77,12 +87,12 @@ export function LobbyScreen({
             )}
             <div className="mt-2 flex items-center gap-2 text-xs">
               <code className="rounded bg-stone-950 px-2 py-1 text-stone-300">
-                {typeof window !== 'undefined' ? `${window.location.origin}/?room=${roomId}` : `/?room=${roomId}`}
+                {getInviteUrl(roomId)}
               </code>
               <button
                 className="rounded border border-stone-600 px-2 py-1 text-stone-300 hover:bg-stone-700"
                 onClick={() => {
-                  const url = `${window.location.origin}/?room=${roomId}`;
+                  const url = getInviteUrl(roomId);
                   navigator.clipboard?.writeText(url).then(() => {
                     setCopied(true);
                     setTimeout(() => setCopied(false), 1500);
@@ -92,6 +102,11 @@ export function LobbyScreen({
                 {copied ? '已复制' : '复制邀请链接'}
               </button>
             </div>
+            {isLocalhost() && (
+              <p className="mt-2 max-w-md text-xs text-amber-500">
+                当前是 localhost 调试地址，手机无法直接打开。请改用电脑的局域网 IP 访问（例如 http://192.168.x.x:5173），或部署到 HTTPS 公网后再分享链接。
+              </p>
+            )}
           </div>
           <button onClick={onLeave} className="text-sm text-stone-400 hover:text-stone-100">
             离开
