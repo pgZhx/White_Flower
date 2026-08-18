@@ -237,11 +237,12 @@ describe('NetworkHost + NetworkPeer over in-memory transport', () => {
     expect(latePeer.state.lastError).toBe('游戏已经开始，无法加入');
   });
 
-  it('removes disconnected peers from lobby', async () => {
+  it('marks disconnected peers so they can reconnect', async () => {
     const { hostTransport, controller, peers } = await createHostWithPeers(['Alice', 'Bob']);
     expect(controller.room.players.length).toBe(3);
     hostTransport.emitPeerDisconnected(peers[0]!.peerId);
     await flush();
-    expect(controller.room.players.map((p) => p.nickname)).toEqual(['Host', 'Bob']);
+    expect(controller.room.players.map((p) => p.nickname)).toEqual(['Host', 'Alice', 'Bob']);
+    expect(controller.room.players.find((p) => p.nickname === 'Alice')?.connected).toBe(false);
   });
 });

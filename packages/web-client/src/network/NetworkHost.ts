@@ -19,6 +19,7 @@ export class NetworkHost {
   private readonly peerToPlayer = new Map<string, string>();
   private readonly playerToPeer = new Map<string, string>();
   private readonly peerSessions = new Map<string, string>();
+  private readonly disconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly unsubscribers: Array<() => void> = [];
   private destroyed = false;
 
@@ -28,6 +29,7 @@ export class NetworkHost {
   ) {
     this.unsubscribers.push(
       this.transport.onMessage((message, fromPeerId) => this.handleMessage(message, fromPeerId)),
+      this.transport.onPeerConnected((peerId) => this.handlePeerConnected(peerId)),
       this.transport.onPeerDisconnected((peerId) => this.handlePeerDisconnected(peerId)),
       this.controller.subscribe(() => this.broadcastAll()),
     );
@@ -37,6 +39,10 @@ export class NetworkHost {
     if (this.destroyed) return;
     this.destroyed = true;
     for (const unsubscribe of this.unsubscribers) unsubscribe();
+    for (const timer of this.disconnectTimers.values()) {
+      clearTimeout(timer);
+    }
+    this.disconnectTimers.clear();
     this.peerToPlayer.clear();
     this.playerToPeer.clear();
     this.peerSessions.clear();
@@ -65,14 +71,6 @@ export class NetworkHost {
       this.sendError(peerId ?? '', 'PROTOCOL_MISMATCH', '缺少 Peer 标识');
       return;
     }
-    if (this.peerToPlayer.has(peerId)) {
-      this.sendError(peerId, 'ALREADY_JOINED', '你已经在该房间中');
-      return;
-    }
-    if (this.controller.room.status !== 'LOBBY') {
-      this.sendError(peerId, 'GAME_ALREADY_STARTED', '游戏已经开始，无法加入');
-      return;
-    }
     if (this.controller.room.players.length >= 10) {
       this.sendError(peerId, 'ROOM_FULL', '房间已满');
       return;
@@ -82,8 +80,72 @@ export class NetworkHost {
       this.sendError(peerId, 'INVALID_NICKNAME', '昵称不合法（1-16 位且不含空格）');
       return;
     }
+
+    const existingPlayerId = this.peerToPlayer.get(peerId);
+    if (existingPlayerId) {
+      // This is a reconnect (e.g. page refresh or temporary network drop).
+      // The player's identity is already known, so re-accept without creating a duplicate.
+      if (message.sessionId) this.peerSessions.set(peerId, message.sessionId);
+      const player = this.controller.room.players.find((p) => p.id === existingPlayerId);
+      if (player && player.nickname.toLowerCase() === nickname.toLowerCase()) {
+        const timer = this.disconnectTimers.get(peerId);
+        if (timer) {
+          clearTimeout(timer);
+          this.disconnectTimers.delete(peerId);
+        }
+        this.controller.setPlayerConnected(existingPlayerId, true);
+        const accepted = createMessage<JoinAccepted>('JOIN_ACCEPTED', {
+          playerId: existingPlayerId,
+          payload: {
+            playerId: existingPlayerId,
+            hostPlayerId: this.controller.hostPlayerId,
+            roomState: this.controller.room,
+          },
+        });
+        this.transport.sendTo(peerId, accepted);
+        this.broadcastAll();
+        return;
+      }
+      this.sendError(peerId, 'SESSION_MISMATCH', '已有相同连接但昵称不匹配，请返回首页重新加入');
+      return;
+    }
+
+    // If a returning player supplies their old playerId (stored locally before a
+    // refresh), let them back into the same seat even after the host has reloaded.
+    const reconnectingPlayer = message.playerId
+      ? this.controller.room.players.find(
+          (p) => p.id === message.playerId && p.nickname.toLowerCase() === nickname.toLowerCase(),
+        )
+      : undefined;
+    if (reconnectingPlayer) {
+      const timer = this.disconnectTimers.get(peerId);
+      if (timer) {
+        clearTimeout(timer);
+        this.disconnectTimers.delete(peerId);
+      }
+      this.peerToPlayer.set(peerId, reconnectingPlayer.id);
+      this.playerToPeer.set(reconnectingPlayer.id, peerId);
+      if (message.sessionId) this.peerSessions.set(peerId, message.sessionId);
+      this.controller.setPlayerConnected(reconnectingPlayer.id, true);
+      const accepted = createMessage<JoinAccepted>('JOIN_ACCEPTED', {
+        playerId: reconnectingPlayer.id,
+        payload: {
+          playerId: reconnectingPlayer.id,
+          hostPlayerId: this.controller.hostPlayerId,
+          roomState: this.controller.room,
+        },
+      });
+      this.transport.sendTo(peerId, accepted);
+      this.broadcastAll();
+      return;
+    }
+
     if (this.controller.room.players.some((p) => p.nickname.toLowerCase() === nickname.toLowerCase())) {
       this.sendError(peerId, 'DUPLICATE_NICKNAME', '昵称已被使用');
+      return;
+    }
+    if (this.controller.room.status !== 'LOBBY') {
+      this.sendError(peerId, 'GAME_ALREADY_STARTED', '游戏已经开始，无法加入');
       return;
     }
 
@@ -150,15 +212,37 @@ export class NetworkHost {
     const playerId = this.peerToPlayer.get(peerId);
     if (!playerId) return;
 
-    this.peerToPlayer.delete(peerId);
-    this.playerToPeer.delete(playerId);
+    // Keep the peer->player mapping so the same browser can reconnect after a
+    // temporary drop or page refresh. The UI marks the player as disconnected.
     this.peerSessions.delete(peerId);
+    this.controller.setPlayerConnected(playerId, false);
+    this.broadcastAll();
 
+    // In the lobby, clean up players who never come back after a grace period.
     if (this.controller.room.status === 'LOBBY') {
-      this.controller.removePlayer(playerId);
-    } else {
-      this.controller.setPlayerConnected(playerId, false);
+      const timer = setTimeout(() => {
+        this.disconnectTimers.delete(peerId);
+        const player = this.controller.room.players.find((p) => p.id === playerId);
+        if (!player || player.connected) return;
+        this.controller.removePlayer(playerId);
+        this.peerToPlayer.delete(peerId);
+        this.playerToPeer.delete(playerId);
+        this.peerSessions.delete(peerId);
+        this.broadcastAll();
+      }, 60_000);
+      this.disconnectTimers.set(peerId, timer);
     }
+  }
+
+  private handlePeerConnected(peerId: string): void {
+    const playerId = this.peerToPlayer.get(peerId);
+    if (!playerId) return;
+    const timer = this.disconnectTimers.get(peerId);
+    if (timer) {
+      clearTimeout(timer);
+      this.disconnectTimers.delete(peerId);
+    }
+    this.controller.setPlayerConnected(playerId, true);
     this.broadcastAll();
   }
 

@@ -41,5 +41,7 @@ export interface GameClient {
   isRandomForced(playerId: string): boolean;
   getPendingMagic10(): PendingMagic10View | null;
   getGameOverSnapshot(): GameOverSnapshot | null;
+  get lastError(): string | null;
+  reconnect?(): Promise<void>;
   disconnect(): void;
 }

@@ -20,11 +20,15 @@ export class PeerGameClient implements GameClient {
     return this.networkPeer.state.playerId;
   }
 
+  get sessionId(): string {
+    return this.networkPeer.sessionId;
+  }
+
   subscribe(listener: () => void): () => void {
     return this.networkPeer.subscribe(listener);
   }
 
-  async connect(nickname: string): Promise<void> {
+  async connect(nickname: string, playerId?: string): Promise<void> {
     await new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => {
         cleanup();
@@ -46,7 +50,7 @@ export class PeerGameClient implements GameClient {
         }
       });
 
-      this.networkPeer.join(this.roomId, nickname);
+      this.networkPeer.join(this.roomId, nickname, playerId);
     });
   }
 
@@ -128,6 +132,30 @@ export class PeerGameClient implements GameClient {
         hand: p.hand ?? [],
       })),
     };
+  }
+
+  async reconnect(): Promise<void> {
+    const roomId = this.roomId;
+    const nickname = this.networkPeer.state.room?.players.find((p) => p.id === this.playerId)?.nickname
+      ?? this.networkPeer.state.room?.players[0]?.nickname
+      ?? '';
+    const playerId = this.playerId ?? undefined;
+
+    let lastError: unknown = new Error('重连失败');
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      try {
+        await this.networkPeer.reconnect(roomId, nickname, playerId);
+        return;
+      } catch (error) {
+        lastError = error;
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
+    }
+    throw lastError;
+  }
+
+  get lastError(): string | null {
+    return this.networkPeer.state.lastError;
   }
 
   disconnect(): void {

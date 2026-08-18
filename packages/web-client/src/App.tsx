@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   LocalTransport,
   WebRtcTransport,
@@ -18,6 +18,15 @@ import { PeerGameClient } from './game/PeerGameClient';
 import { NetworkHost } from './network/NetworkHost';
 import { NetworkPeer } from './network/NetworkPeer';
 import type { GameClient } from './game/GameClient';
+import {
+  clearRoomSession,
+  loadHostSession,
+  loadLastHostRoom,
+  loadPeerSession,
+  saveHostSession,
+  savePeerSession,
+  type PeerSession,
+} from './game/sessionStore';
 
 export type Screen =
   | { name: 'home' }
@@ -122,13 +131,14 @@ function errorMessage(error: unknown): string {
   return '发生未知错误，请重试。';
 }
 
-async function createHostClient(nickname: string): Promise<HostGameClient> {
+async function createHostClient(nickname: string): Promise<{ client: HostGameClient; peerId: string }> {
   let lastError: unknown = new Error('创建房间失败，请重试。');
   const transportMode = getTransportMode();
   for (let attempt = 0; attempt < 5; attempt += 1) {
     const roomId = generateRoomCode();
     const controller = new HostGameController({ roomId, hostPlayerId: makePlayerId(), seed: randomSeed() });
     controller.addPlayer(nickname);
+    const peerId = makePeerId('host');
 
     const transport =
       transportMode === 'webrtc'
@@ -136,14 +146,14 @@ async function createHostClient(nickname: string): Promise<HostGameClient> {
         : new WebSocketRelayTransport({
             role: 'host',
             roomId,
-            clientId: makePeerId('host'),
+            clientId: peerId,
             url: getRelayUrl(),
           });
 
     const networkHost = new NetworkHost(controller, transport);
     try {
       await transport.connect();
-      return new HostGameClient(controller, networkHost, transport);
+      return { client: new HostGameClient(controller, networkHost, transport), peerId };
     } catch (error) {
       lastError = error;
       networkHost.destroy();
@@ -159,45 +169,105 @@ async function createHostClient(nickname: string): Promise<HostGameClient> {
   throw lastError;
 }
 
-async function createPeerClient(nickname: string, roomId: string): Promise<PeerGameClient> {
+async function createPeerClient(
+  nickname: string,
+  roomId: string,
+  savedSession?: PeerSession | null,
+): Promise<{ client: PeerGameClient; peerId: string }> {
   const normalizedRoomId = roomId.trim().toUpperCase();
   const transportMode = getTransportMode();
-  const peerId = makePeerId('guest');
-  const transport =
-    transportMode === 'webrtc'
-      ? new WebRtcTransport({ role: 'peer', peerId, hostPeerId: normalizedRoomId, ...getPeerJSOptions() })
-      : new WebSocketRelayTransport({
-          role: 'peer',
-          roomId: normalizedRoomId,
-          clientId: peerId,
-          url: getRelayUrl(),
-        });
+  const peerId = savedSession?.peerId ?? makePeerId('guest');
+  let lastError: unknown = new Error('加入房间失败');
 
-  try {
-    await withTimeout(transport.connect(), 12000);
-    const networkPeer = new NetworkPeer(transport, peerId);
-    const peerClient = new PeerGameClient(networkPeer, normalizedRoomId);
-    await peerClient.connect(nickname);
-    return peerClient;
-  } catch (error) {
-    transport.disconnect();
-    throw error;
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const transport =
+      transportMode === 'webrtc'
+        ? new WebRtcTransport({ role: 'peer', peerId, hostPeerId: normalizedRoomId, ...getPeerJSOptions() })
+        : new WebSocketRelayTransport({
+            role: 'peer',
+            roomId: normalizedRoomId,
+            clientId: peerId,
+            url: getRelayUrl(),
+          });
+
+    try {
+      await withTimeout(transport.connect(), 12000);
+      const networkPeer = new NetworkPeer(transport, peerId);
+      const peerClient = new PeerGameClient(networkPeer, normalizedRoomId);
+      await peerClient.connect(nickname, savedSession?.playerId ?? undefined);
+      return { client: peerClient, peerId };
+    } catch (error) {
+      lastError = error;
+      transport.disconnect();
+      if (errorCode(error) !== 'ROOM_NOT_FOUND') throw error;
+      await new Promise((resolve) => setTimeout(resolve, 300 * (attempt + 1)));
+    }
   }
+  throw lastError;
+}
+
+async function restoreHostClient(
+  session: { roomId: string; nickname: string; playerId: string; peerId: string },
+  snapshot: ReturnType<HostGameController['snapshot']>,
+): Promise<{ client: HostGameClient; peerId: string }> {
+  const controller = HostGameController.fromSnapshot(snapshot);
+  const transportMode = getTransportMode();
+  let lastError: unknown = new Error('恢复房间失败');
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const transport =
+      transportMode === 'webrtc'
+        ? new WebRtcTransport({ role: 'host', peerId: session.roomId, ...getPeerJSOptions() })
+        : new WebSocketRelayTransport({
+            role: 'host',
+            roomId: session.roomId,
+            clientId: session.peerId,
+            url: getRelayUrl(),
+          });
+    const networkHost = new NetworkHost(controller, transport);
+    try {
+      await transport.connect();
+      return { client: new HostGameClient(controller, networkHost, transport), peerId: session.peerId };
+    } catch (error) {
+      lastError = error;
+      networkHost.destroy();
+      transport.disconnect();
+      if (!isRoomExists(error)) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 300 * (attempt + 1)));
+    }
+  }
+  throw lastError;
 }
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>({ name: 'home' });
   const [initialRoom, setInitialRoom] = useState<string | null>(null);
+  const [roomParamReady, setRoomParamReady] = useState(false);
   const [client, setClient] = useState<GameClient | null>(null);
   const debugMode = useMemo(isDebugMode, []);
+  const reconnectingRef = useRef(false);
 
   useEffect(() => {
     setInitialRoom(readRoomParam());
+    setRoomParamReady(true);
   }, []);
 
   useEffect(() => {
     if (!client) return;
     return client.subscribe(() => {
+      if (client instanceof HostGameClient) {
+        const saved = loadHostSession(client.roomId);
+        if (saved) {
+          saveHostSession(saved.session, client.controller.snapshot());
+        }
+      }
+      if (client.lastError && !reconnectingRef.current) {
+        reconnectingRef.current = true;
+        window.setTimeout(() => {
+          void client.reconnect?.().catch(() => undefined).finally(() => {
+            reconnectingRef.current = false;
+          });
+        }, 800);
+      }
       const view = client.getView();
       if (view && view.phase !== 'LOBBY' && view.phase !== 'SETUP') {
         setScreen((prev) => {
@@ -231,7 +301,17 @@ export default function App() {
 
     setScreen({ name: 'connecting', message: '正在创建房间…' });
     try {
-      const hostClient = await createHostClient(nickname);
+      const { client: hostClient, peerId } = await createHostClient(nickname);
+      saveHostSession(
+        {
+          roomId: hostClient.roomId,
+          role: 'host',
+          nickname,
+          playerId: hostClient.playerId,
+          peerId,
+        },
+        hostClient.controller.snapshot(),
+      );
       setClient(hostClient);
       setScreen({
         name: 'lobby',
@@ -268,23 +348,45 @@ export default function App() {
 
     setScreen({ name: 'connecting', message: `正在连接房间 ${normalizedRoomId}…` });
     try {
-      const peerClient = await createPeerClient(nickname, normalizedRoomId);
-      setClient(peerClient);
-      setScreen({
-        name: 'lobby',
+      const savedSession = loadPeerSession(normalizedRoomId);
+      const { client: peerClient, peerId } = await createPeerClient(nickname, normalizedRoomId, savedSession);
+      savePeerSession({
         roomId: normalizedRoomId,
+        role: 'peer',
         nickname,
         playerId: peerClient.playerId ?? '',
-        isHost: false,
+        peerId,
+        sessionId: peerClient.sessionId,
       });
+      setClient(peerClient);
+      const peerPhase = peerClient.phase;
+      setScreen(
+        peerPhase !== 'LOBBY' && peerPhase !== 'SETUP'
+          ? {
+              name: 'game',
+              roomId: normalizedRoomId,
+              nickname,
+              playerId: peerClient.playerId ?? '',
+              isHost: false,
+            }
+          : {
+              name: 'lobby',
+              roomId: normalizedRoomId,
+              nickname,
+              playerId: peerClient.playerId ?? '',
+              isHost: false,
+            },
+      );
     } catch (error) {
       setScreen({ name: 'error', message: errorMessage(error) });
     }
   };
 
   const handleLeave = () => {
+    const roomId = client?.roomId;
     client?.disconnect();
     setClient(null);
+    if (roomId) clearRoomSession(roomId);
     setScreen({ name: 'home' });
   };
 
@@ -299,6 +401,63 @@ export default function App() {
       isHost: client.isHost,
     });
   };
+
+  useEffect(() => {
+    if (debugMode || !roomParamReady || screen.name !== 'home' || client) return;
+    const roomToRestore = initialRoom ?? loadLastHostRoom();
+    if (!roomToRestore) return;
+
+    let cancelled = false;
+    const run = async () => {
+      const hostSaved = loadHostSession(roomToRestore);
+      if (hostSaved) {
+        setScreen({ name: 'connecting', message: '正在恢复房间…' });
+        try {
+          const { client: hostClient } = await restoreHostClient(hostSaved.session, hostSaved.snapshot);
+          if (cancelled) {
+            hostClient.disconnect();
+            return;
+          }
+          setClient(hostClient);
+          const phase = hostClient.controller.phase;
+          setScreen(
+            phase !== 'LOBBY' && phase !== 'SETUP'
+              ? {
+                  name: 'game',
+                  roomId: hostClient.roomId,
+                  nickname: hostSaved.session.nickname,
+                  playerId: hostClient.playerId,
+                  isHost: true,
+                }
+              : {
+                  name: 'lobby',
+                  roomId: hostClient.roomId,
+                  nickname: hostSaved.session.nickname,
+                  playerId: hostClient.playerId,
+                  isHost: true,
+                },
+          );
+        } catch (error) {
+          if (!cancelled) setScreen({ name: 'error', message: errorMessage(error) });
+        }
+        return;
+      }
+
+      const peerSaved = loadPeerSession(roomToRestore);
+      if (peerSaved) {
+        setScreen({ name: 'connecting', message: `正在重新连接房间 ${roomToRestore}…` });
+        await handleJoin(peerSaved.nickname, roomToRestore);
+      }
+    };
+
+    void run();
+    return () => {
+      cancelled = true;
+    };
+    // Intentionally run only when the room parameter or debug mode changes; the
+    // screen/client guards prevent duplicate restores.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialRoom, roomParamReady, debugMode]);
 
   if (screen.name === 'home') {
     return (

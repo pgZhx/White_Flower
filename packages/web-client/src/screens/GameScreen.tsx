@@ -131,7 +131,7 @@ export function GameScreen({ roomId, nickname, isHost, client, debug, onExit }: 
 
   return (
     <div className="min-h-screen bg-cathedral px-4 py-6">
-      <div className="mx-auto max-w-6xl">
+      <div className="mx-auto max-w-7xl">
         <Header
           roomId={roomId}
           nickname={nickname}
@@ -145,105 +145,115 @@ export function GameScreen({ roomId, nickname, isHost, client, debug, onExit }: 
           onExit={onExit}
         />
 
-        {phase === 'NIGHT_RECOGNITION' && (
-          <IdentityPanel view={view} onConfirm={confirmIdentity} onConfirmAll={debug && isHost ? confirmAll : undefined} />
-        )}
+        <div className="mt-6 grid gap-6 lg:grid-cols-[300px_minmax(0,1fr)]">
+          <aside className="min-w-0 order-2 lg:order-1">
+            <RoundHistoryPanel view={view} />
+          </aside>
 
-        {phase === 'NIGHT_DOUBLE_KNIFE' && (
-          <NightPanel view={view} onContinue={confirmIdentity} />
-        )}
+          <main className="min-w-0 order-1 lg:order-2">
+            <MagicNotice view={view} />
 
-        {phase === 'ROUND_MAGIC_SELECT' && (
-          <CoinPhasePanel
-            view={view}
-            activePlayerId={activeViewerId}
-            onSelect={(targetId) => client.handleCommand({ type: 'SELECT_COIN_TARGET', playerId: activeViewerId, targetId })}
-          />
-        )}
+            {phase === 'NIGHT_RECOGNITION' && (
+              <IdentityPanel view={view} onConfirm={confirmIdentity} onConfirmAll={debug && isHost ? confirmAll : undefined} />
+            )}
 
-        {phase === 'MAGIC_RESOLUTION' && view.round?.magicNumber && (
-          <MagicResolutionPanel
-            view={view}
-            activePlayerId={activeViewerId}
-            magicId={view.round.magicNumber}
-            onResolve={(targetIds, magic6Choice) =>
-              client.handleCommand({
-                type: 'RESOLVE_MAGIC',
-                playerId: activeViewerId,
-                targetIds,
-                ...(magic6Choice ? { magic6Choice } : {}),
-              })
-            }
-          />
-        )}
+            {phase === 'NIGHT_DOUBLE_KNIFE' && (
+              <NightPanel view={view} onContinue={confirmIdentity} />
+            )}
 
-        {phase === 'PLAYER_ACTIONS' && (
-          <ActionPanel
-            view={view}
-            activePlayerId={activeViewerId}
-            client={client}
-          />
-        )}
+            {phase === 'ROUND_MAGIC_SELECT' && (
+              <CoinPhasePanel
+                view={view}
+                activePlayerId={activeViewerId}
+                onSelect={(targetId) => client.handleCommand({ type: 'SELECT_COIN_TARGET', playerId: activeViewerId, targetId })}
+              />
+            )}
 
-        {phase === 'PRE_REVEAL_MAGIC' && (
-          <Magic10Panel view={view} activePlayerId={activeViewerId} client={client} />
-        )}
+            {phase === 'MAGIC_RESOLUTION' && view.round?.magicNumber && (
+              <MagicResolutionPanel
+                view={view}
+                activePlayerId={activeViewerId}
+                magicId={view.round.magicNumber}
+                onResolve={(targetIds, magic6Choice) =>
+                  client.handleCommand({
+                    type: 'RESOLVE_MAGIC',
+                    playerId: activeViewerId,
+                    targetIds,
+                    ...(magic6Choice ? { magic6Choice } : {}),
+                  })
+                }
+              />
+            )}
 
-        {phase === 'ROUND_REVEAL' && (
-          <RevealPanel
-            view={view}
-            onReveal={() => client.handleCommand({ type: 'REVEAL', playerId: activeViewerId })}
-          />
-        )}
+            {phase === 'PLAYER_ACTIONS' && (
+              <ActionPanel
+                view={view}
+                activePlayerId={activeViewerId}
+                client={client}
+              />
+            )}
 
-        {phase === 'ROUND_RESOLUTION' && (
-          <ResolutionPanel
-            view={view}
-            onContinue={() => client.handleCommand({ type: 'RESOLVE_ROUND', playerId: activeViewerId })}
-            mode="reveal"
-          />
-        )}
+            {phase === 'PRE_REVEAL_MAGIC' && (
+              <Magic10Panel view={view} activePlayerId={activeViewerId} client={client} />
+            )}
 
-        {phase === 'CHECK_VICTORY' && (
-          <ResolutionPanel
-            view={view}
-            onContinue={() => client.handleCommand({ type: 'CHECK_VICTORY', playerId: activeViewerId })}
-            mode="resolution"
-          />
-        )}
+            {phase === 'ROUND_REVEAL' && (
+              <RevealPanel
+                view={view}
+                onReveal={() => client.handleCommand({ type: 'REVEAL', playerId: activeViewerId })}
+              />
+            )}
 
-        {phase === 'GAME_OVER' && gameOver && (
-          <GameOverPanel gameOver={gameOver} onExit={onExit} />
-        )}
+            {phase === 'ROUND_RESOLUTION' && (
+              <ResolutionPanel
+                view={view}
+                onContinue={() => client.handleCommand({ type: 'RESOLVE_ROUND', playerId: activeViewerId })}
+                mode="reveal"
+              />
+            )}
 
-        {view.me.magic9Reveal && (
-          <Panel title="魔法 9 私人信息">
-            <p className="text-stone-300">下面两名玩家分别是白蔷薇与司教：</p>
-            <div className="mt-2 flex gap-2">
-              {[view.me.magic9Reveal.playerAId, view.me.magic9Reveal.playerBId].map((id) => (
-                <span key={id} className="rounded border border-stone-600 bg-stone-800 px-3 py-1">
-                  {view.players.find((p) => p.id === id)?.nickname ?? id}
-                </span>
-              ))}
-            </div>
-            <p className="mt-2 text-xs text-stone-500">具体身份未知。</p>
-          </Panel>
-        )}
+            {phase === 'CHECK_VICTORY' && (
+              <ResolutionPanel
+                view={view}
+                onContinue={() => client.handleCommand({ type: 'CHECK_VICTORY', playerId: activeViewerId })}
+                mode="resolution"
+              />
+            )}
 
-        {view.me.magic11Seen && (
-          <Panel title="魔法 11 私人信息">
-            <p className="text-stone-300">
-              你随机看到 {view.players.find((p) => p.id === view.me.magic11Seen?.targetId)?.nickname ?? '目标'} 的一张手牌：
-            </p>
-            <div className="mt-2">
-              <CardBadge card={view.me.magic11Seen.card} />
-            </div>
-          </Panel>
-        )}
+            {phase === 'GAME_OVER' && gameOver && (
+              <GameOverPanel gameOver={gameOver} onExit={onExit} />
+            )}
 
-        <Board view={view} myPlayerId={activeViewerId} />
+            {view.me.magic9Reveal && (
+              <Panel title="魔法 9 私人信息">
+                <p className="text-stone-300">下面两名玩家分别是白蔷薇与司教：</p>
+                <div className="mt-2 flex gap-2">
+                  {[view.me.magic9Reveal.playerAId, view.me.magic9Reveal.playerBId].map((id) => (
+                    <span key={id} className="rounded border border-stone-600 bg-stone-800 px-3 py-1">
+                      {view.players.find((p) => p.id === id)?.nickname ?? id}
+                    </span>
+                  ))}
+                </div>
+                <p className="mt-2 text-xs text-stone-500">具体身份未知。</p>
+              </Panel>
+            )}
 
-        <ReferencePanels view={view} />
+            {view.me.magic11Seen && (
+              <Panel title="魔法 11 私人信息">
+                <p className="text-stone-300">
+                  你随机看到 {view.players.find((p) => p.id === view.me.magic11Seen?.targetId)?.nickname ?? '目标'} 的一张手牌：
+                </p>
+                <div className="mt-2">
+                  <CardBadge card={view.me.magic11Seen.card} />
+                </div>
+              </Panel>
+            )}
+
+            <Board view={view} myPlayerId={activeViewerId} />
+
+            <ReferencePanels view={view} />
+          </main>
+        </div>
       </div>
     </div>
   );
@@ -302,8 +312,143 @@ function Header({
   );
 }
 
+interface RoundHistoryEntry {
+  roundNumber: number;
+  magic: string | null;
+  actions: Array<{ player: string; action: string; card?: Card }>;
+  reveal: { cards: Card[]; playerMap: Record<string, Card> | null; shuffled: boolean } | null;
+}
+
+function buildRoundHistory(view: ClientView): RoundHistoryEntry[] {
+  const entries: RoundHistoryEntry[] = [];
+  let current: RoundHistoryEntry | null = null;
+
+  const playerName = (playerId: string): string =>
+    view.players.find((p) => p.id === playerId)?.nickname ?? playerId;
+
+  for (const event of view.eventLog) {
+    const payload = event.payload as Record<string, unknown>;
+    if (event.type === 'CRYSTAL_REVEALED') {
+      const roundNumber = Number(payload.roundNumber ?? view.roundNumber);
+      current = { roundNumber, magic: null, actions: [], reveal: null };
+      entries.push(current);
+      continue;
+    }
+    if (!current) continue;
+
+    if (event.type === 'MAGIC_RESOLVED') {
+      const magicId = Number(payload.magicId ?? 0);
+      const magic = magicBook.find((m) => m.id === magicId);
+      const skipped = payload.skipped ? '（无合法目标，跳过）' : '';
+      current.magic = `${magicId}. ${magic?.name ?? '未知魔法'}${skipped}`;
+      continue;
+    }
+    if (event.type === 'CARD_PLAYED') {
+      const playerId = String(payload.playerId ?? '');
+      const card = typeof payload.card === 'string' ? (payload.card as Card) : undefined;
+      current.actions.push({
+        player: playerName(playerId),
+        action: card ? `出牌：${cardLabel(card)}` : '出牌',
+        ...(card ? { card } : {}),
+      });
+      continue;
+    }
+    if (event.type === 'PLAYER_PASSED') {
+      current.actions.push({
+        player: playerName(String(payload.playerId ?? '')),
+        action: '跳过',
+      });
+      continue;
+    }
+    if (event.type === 'CARDS_REVEALED') {
+      current.reveal = {
+        cards: Array.isArray(payload.cards) ? (payload.cards as Card[]) : [],
+        playerMap: payload.playerMap && typeof payload.playerMap === 'object'
+          ? (payload.playerMap as Record<string, Card>)
+          : null,
+        shuffled: Boolean(payload.shuffled),
+      };
+    }
+  }
+
+  return entries;
+}
+
+function RoundHistoryPanel({ view }: { view: ClientView }) {
+  const history = useMemo(() => buildRoundHistory(view), [view]);
+
+  return (
+    <div className="rounded-lg border border-stone-700 bg-stone-900 p-4">
+      <h3 className="text-sm font-semibold text-rose">出牌记录</h3>
+      {history.length === 0 ? (
+        <p className="mt-2 text-xs text-stone-500">游戏开始后这里会记录每一轮的出牌情况。</p>
+      ) : (
+        <div className="mt-3 space-y-4">
+          {history.map((round) => (
+            <div key={round.roundNumber} className="rounded border border-stone-800 bg-stone-950 p-3">
+              <p className="text-xs font-semibold text-stone-300">
+                第 {round.roundNumber} 轮{round.magic ? ` · ${round.magic}` : ''}
+              </p>
+              {round.actions.length > 0 && (
+                <ul className="mt-2 space-y-1 text-xs text-stone-400">
+                  {round.actions.map((action, i) => (
+                    <li key={`${round.roundNumber}-${i}`}>
+                      <span className="text-stone-200">{action.player}</span> {action.action}
+                      {action.card && <span className="ml-1 text-stone-500">（牌面已公开）</span>}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {round.reveal && (
+                <div className="mt-2 text-xs text-stone-400">
+                  <p>{round.reveal.shuffled ? '公开牌面（已洗混）：' : '公开牌面对应：'}</p>
+                  {round.reveal.playerMap ? (
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {Object.entries(round.reveal.playerMap).map(([playerId, card]) => (
+                        <span key={playerId} className="rounded bg-stone-800 px-1.5 py-0.5">
+                          {view.players.find((p) => p.id === playerId)?.nickname ?? playerId}：
+                          <CardBadge card={card} />
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {round.reveal.cards.map((card, i) => (
+                        <CardBadge key={`${card}-${i}`} card={card} />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MagicNotice({ view }: { view: ClientView }) {
+  const round = view.round;
+  if (!round?.magicNumber) return null;
+  const magic = magicBook.find((m) => m.id === round.magicNumber);
+  const casterName = view.players.find((p) => p.id === round.crystalRevealerId)?.nickname ?? '未知玩家';
+  const waiting = view.phase === 'MAGIC_RESOLUTION';
+
+  return (
+    <div className="rounded-lg border border-rose/40 bg-rose/10 px-4 py-3">
+      <p className="text-sm text-rose">
+        <span className="font-semibold">本轮魔法：{round.magicNumber}. {magic?.name ?? '未知'}</span>
+        <span className="ml-3">发动者：{casterName}</span>
+        <span className="ml-3">{waiting ? '等待发动者解析…' : '已生效'}</span>
+      </p>
+    </div>
+  );
+}
+
 function ReferencePanels({ view }: { view: ClientView }) {
   const hasNightInfo = (view.me.nightRecognition?.length ?? 0) > 0;
+  const [magicOpen, setMagicOpen] = useState(false);
   return (
     <div className="mt-6 grid gap-4 lg:grid-cols-3">
       {hasNightInfo && (
@@ -325,11 +470,20 @@ function ReferencePanels({ view }: { view: ClientView }) {
       )}
       <div className={`rounded-lg border border-stone-700 bg-stone-900 p-4 ${hasNightInfo ? 'lg:col-span-2' : 'lg:col-span-3'}`}>
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h3 className="text-sm font-semibold text-rose">魔法之书</h3>
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm font-semibold text-rose">魔法之书</h3>
+            <button
+              className="rounded border border-stone-600 px-2 py-0.5 text-xs text-stone-300 hover:bg-stone-700"
+              onClick={() => setMagicOpen((open) => !open)}
+            >
+              {magicOpen ? '收起' : '展开'}
+            </button>
+          </div>
           <span className="text-xs text-stone-400">
             你的水晶：{view.me.crystal !== null ? <span className="text-rose">{view.me.crystal}</span> : '已使用'}
           </span>
         </div>
+        {magicOpen && (
         <div className="mt-3 grid gap-2 sm:grid-cols-2">
           {magicBook.map((magic) => {
             const isMine = view.me.crystal === magic.id;
@@ -347,6 +501,7 @@ function ReferencePanels({ view }: { view: ClientView }) {
             );
           })}
         </div>
+        )}
       </div>
     </div>
   );

@@ -30,6 +30,7 @@ export class WebSocketRelayTransport implements MultiplayerTransport {
   readonly id: string;
   private socket: WebSocket | null = null;
   private settled = false;
+  private manuallyClosed = false;
   private hostClientId: string | null = null;
   private handlers = new Set<(message: NetworkMessage, fromPeerId?: string) => void>();
   private connectedHandlers = new Set<(peerId: string) => void>();
@@ -119,7 +120,11 @@ export class WebSocketRelayTransport implements MultiplayerTransport {
           fail(new Error('WebSocket 连接已关闭'));
           return;
         }
-        this.notifyDisconnected();
+        // Only report the socket that is still the active transport. A newer
+        // reconnect socket may have already replaced this one.
+        if (this.socket === ws) {
+          this.notifyDisconnected();
+        }
       };
 
       ws.onerror = () => {
@@ -178,7 +183,15 @@ export class WebSocketRelayTransport implements MultiplayerTransport {
     };
   }
 
+  async reconnect(): Promise<void> {
+    this.manuallyClosed = false;
+    this.settled = false;
+    this.socket = null;
+    await this.connect();
+  }
+
   disconnect(): void {
+    this.manuallyClosed = true;
     const ws = this.socket;
     this.socket = null;
     this.settled = true;

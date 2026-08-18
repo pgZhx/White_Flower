@@ -32,13 +32,17 @@ export class NetworkPeer {
   };
 
   private listeners = new Set<() => void>();
-  private readonly sessionId: string;
+  private readonly _sessionId: string;
+
+  get sessionId(): string {
+    return this._sessionId;
+  }
 
   constructor(
     private readonly transport: MultiplayerTransport,
     private readonly peerId: string,
   ) {
-    this.sessionId = makeSessionId();
+    this._sessionId = makeSessionId();
     this.transport.onMessage((message) => this.handleMessage(message));
     this.transport.onPeerDisconnected(() => {
       this.state = {
@@ -56,13 +60,49 @@ export class NetworkPeer {
     };
   }
 
-  join(roomId: string, nickname: string): void {
+  join(roomId: string, nickname: string, playerId?: string): void {
     const message = createMessage<JoinRequest>('JOIN_REQUEST', {
       roomId,
       nickname,
+      ...(playerId ? { playerId } : {}),
       sessionId: this.sessionId,
     });
     this.transport.send(message);
+  }
+
+  async reconnect(roomId: string, nickname: string, playerId?: string): Promise<void> {
+    if (this.transport.reconnect) {
+      await this.transport.reconnect();
+    }
+    this.state = {
+      playerId: null,
+      room: null,
+      view: null,
+      lastError: null,
+    };
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        cleanup();
+        reject(new Error('重连超时，请检查网络后重试。'));
+      }, 12000);
+
+      const cleanup = () => {
+        clearTimeout(timer);
+        unsub();
+      };
+
+      const unsub = this.subscribe(() => {
+        if (this.state.playerId) {
+          cleanup();
+          resolve();
+        } else if (this.state.lastError) {
+          cleanup();
+          reject(new Error(this.state.lastError));
+        }
+      });
+
+      this.join(roomId, nickname, playerId);
+    });
   }
 
   setReady(ready: boolean): void {

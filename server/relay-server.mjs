@@ -115,11 +115,15 @@ function handleRegisterPeer(ws, message) {
     sendError(ws, 'HOST_OFFLINE', '房主已离线');
     return;
   }
-  if (room.peers.size >= MAX_PEERS) {
+  if (!room.peers.has(clientId) && room.peers.size >= MAX_PEERS) {
     sendError(ws, 'ROOM_FULL', '房间网络连接已满');
     return;
   }
 
+  const previousSocket = room.peers.get(clientId);
+  if (previousSocket && previousSocket !== ws && isOpen(previousSocket)) {
+    previousSocket.close();
+  }
   room.peers.set(clientId, ws);
   socketMeta.set(ws, { roomId, clientId, role: 'peer' });
   sendJson(ws, {
@@ -227,9 +231,13 @@ function handleClose(ws) {
     rooms.delete(meta.roomId);
     console.log(`host disconnected room=${meta.roomId} room deleted`);
   } else {
-    room.peers.delete(meta.clientId);
-    if (isOpen(room.hostSocket)) {
-      sendJson(room.hostSocket, { kind: 'PEER_DISCONNECTED', peerId: meta.clientId });
+    // Only remove the mapping if this socket is still the active peer for that
+    // clientId. A newer socket may have already replaced it during reconnection.
+    if (room.peers.get(meta.clientId) === ws) {
+      room.peers.delete(meta.clientId);
+      if (isOpen(room.hostSocket)) {
+        sendJson(room.hostSocket, { kind: 'PEER_DISCONNECTED', peerId: meta.clientId });
+      }
     }
     console.log(`peer disconnected room=${meta.roomId} client=${meta.clientId}`);
   }

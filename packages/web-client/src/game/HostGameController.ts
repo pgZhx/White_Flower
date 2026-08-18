@@ -42,6 +42,16 @@ export interface HostGameControllerOptions {
   seed?: number;
 }
 
+export interface HostGameControllerSnapshot {
+  version: 1;
+  roomId: string;
+  hostPlayerId: string;
+  seed: number;
+  room: RoomState;
+  gameState: GameState | null;
+  phaseConfirmations: Array<{ phase: GameState['phase']; playerIds: string[] }>;
+}
+
 export class HostGameController {
   readonly roomId: string;
   readonly hostPlayerId: string;
@@ -75,6 +85,10 @@ export class HostGameController {
     for (const listener of this.listeners) {
       listener();
     }
+  }
+
+  notifyExternalChange(): void {
+    this.emit();
   }
 
   addPlayer(nickname: string, playerId?: string): RoomPlayer {
@@ -326,6 +340,36 @@ export class HostGameController {
         hand: [...p.hand],
       })),
     };
+  }
+
+  snapshot(): HostGameControllerSnapshot {
+    return {
+      version: 1,
+      roomId: this.roomId,
+      hostPlayerId: this.hostPlayerId,
+      seed: this.seed,
+      room: this.room,
+      gameState: this.gameState ? (JSON.parse(JSON.stringify(this.gameState)) as GameState) : null,
+      phaseConfirmations: [...this.phaseConfirmations.entries()].map(([phase, ids]) => ({
+        phase: phase as GameState['phase'],
+        playerIds: [...ids],
+      })),
+    };
+  }
+
+  static fromSnapshot(snapshot: HostGameControllerSnapshot): HostGameController {
+    const controller = new HostGameController({
+      roomId: snapshot.roomId,
+      hostPlayerId: snapshot.hostPlayerId,
+      seed: snapshot.seed,
+    });
+    controller.room = snapshot.room;
+    controller.gameState = snapshot.gameState ? (JSON.parse(JSON.stringify(snapshot.gameState)) as GameState) : null;
+    controller.engine = controller.gameState ? new GameEngine(controller.gameState) : null;
+    controller.phaseConfirmations = new Map(
+      snapshot.phaseConfirmations.map((entry) => [entry.phase, new Set(entry.playerIds)]),
+    );
+    return controller;
   }
 
   handleCommand(command: GameCommand): void {

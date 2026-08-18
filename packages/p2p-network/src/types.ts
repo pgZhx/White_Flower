@@ -28,6 +28,7 @@ export interface NetworkMessageBase {
 export interface JoinRequest extends NetworkMessageBase {
   type: 'JOIN_REQUEST';
   nickname: string;
+  playerId?: string;
 }
 
 export interface JoinAccepted extends NetworkMessageBase {
@@ -124,6 +125,7 @@ export type Unsubscribe = () => void;
 export interface MultiplayerTransport {
   readonly id?: string;
   connect(): Promise<void>;
+  reconnect?(): Promise<void>;
   sendTo(peerId: string, message: NetworkMessage): void;
   send(message: NetworkMessage): void;
   broadcast(message: NetworkMessage): void;

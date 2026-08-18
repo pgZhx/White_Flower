@@ -8,14 +8,23 @@ export class HostGameClient implements GameClient {
   readonly isHost = true;
   readonly playerId: string;
   readonly roomId: string;
+  private transportLost = false;
 
   constructor(
     readonly controller: HostGameController,
     private readonly networkHost: NetworkHost,
-    private readonly transport: { disconnect(): void },
+    private readonly transport: { disconnect(): void; reconnect?(): Promise<void>; onPeerDisconnected?(handler: (peerId: string) => void): () => void },
   ) {
     this.roomId = controller.roomId;
     this.playerId = controller.hostPlayerId;
+    this.transport.onPeerDisconnected?.((peerId) => {
+      // The relay reports ordinary peer disconnects with that peer's id. Only
+      // the host's own socket close is reported as 'host' in this transport.
+      if (peerId === 'host') {
+        this.transportLost = true;
+        this.controller.notifyExternalChange();
+      }
+    });
   }
 
   subscribe(listener: () => void): () => void {
@@ -94,6 +103,17 @@ export class HostGameClient implements GameClient {
         hand: p.hand,
       })),
     };
+  }
+
+  get lastError(): string | null {
+    return this.transportLost ? '网络连接已断开，正在尝试重连…' : null;
+  }
+
+  async reconnect(): Promise<void> {
+    if (!this.transport.reconnect) return;
+    await this.transport.reconnect();
+    this.transportLost = false;
+    this.controller.notifyExternalChange();
   }
 
   disconnect(): void {
