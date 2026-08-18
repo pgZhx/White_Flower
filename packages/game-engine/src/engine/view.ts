@@ -17,6 +17,9 @@ export interface ClientPlayerView {
   handCount: number;
   hasCrystal: boolean;
   crystalUsed: boolean;
+  role?: Role | null;
+  faction?: Faction | null;
+  hand?: Card[];
 }
 
 export interface ClientRoundView {
@@ -27,6 +30,7 @@ export interface ClientRoundView {
   actionOrder: string[];
   actions: Record<string, 'PLAYED' | 'PASS'>;
   noShuffle: boolean;
+  pendingMagic10: { casterId: string; targetId: string | null } | null;
   reveal: {
     cards: Card[];
     playerMap: Record<string, Card> | null;
@@ -66,6 +70,8 @@ export interface ClientView {
     nightRecognition: string[] | null;
     magic9Reveal: { playerAId: string; playerBId: string } | null;
     magic11Seen: { targetId: string; card: Card } | null;
+    canPass: boolean;
+    isRandomForced: boolean;
   };
   eventLog: GameState['eventLog'];
 }
@@ -94,6 +100,7 @@ const toRoundView = (round: NonNullable<GameState['round']>): ClientRoundView =>
     actionOrder: [...round.actionOrder],
     actions,
     noShuffle: round.noShuffle,
+    pendingMagic10: round.pendingMagic10 ? { casterId: round.pendingMagic10.casterId, targetId: round.pendingMagic10.targetId } : null,
     reveal: round.reveal
       ? {
           cards: [...round.reveal.cards],
@@ -132,13 +139,48 @@ const sanitizeEvent = (event: GameEvent): GameEvent => {
   return { ...event, payload: { ...event.payload } };
 };
 
+
+const canPass = (state: GameState, playerId: string): boolean => {
+  const round = state.round;
+  if (!round) return true;
+  const player = getPlayer(state, playerId);
+  const isRandomForced = (
+    round.randomForcedLeft === playerId ||
+    round.randomForcedRight === playerId ||
+    round.magic8Neighbors?.leftId === playerId ||
+    round.magic8Neighbors?.rightId === playerId
+  );
+  if (round.forcedPlay.includes(playerId) && player.hand.length > 0) return false;
+  if (isRandomForced && player.hand.length > 0) return false;
+  if (round.magic5Constraint?.laterId === playerId) {
+    const earlier = round.actions[round.magic5Constraint.earlierId];
+    return earlier?.type === 'PASS';
+  }
+  return true;
+};
+
+const isRandomForcedForView = (state: GameState, playerId: string): boolean => {
+  const round = state.round;
+  if (!round) return false;
+  return (
+    round.randomForcedLeft === playerId ||
+    round.randomForcedRight === playerId ||
+    round.magic8Neighbors?.leftId === playerId ||
+    round.magic8Neighbors?.rightId === playerId
+  );
+};
+
 export const buildPlayerView = (state: GameState, viewerId: string): ClientView => {
   const viewer = getPlayer(state, viewerId);
 
   return {
     id: state.id,
     phase: state.phase,
-    players: state.players.map(toPublicPlayer),
+    players: state.players.map((p) => {
+      const base = toPublicPlayer(p);
+      if (state.phase !== 'GAME_OVER') return base;
+      return { ...base, role: p.role, faction: p.faction, hand: [...p.hand] };
+    }),
     currentCoinHolderId: state.currentCoinHolderId,
     publicCrystalHistory: state.publicCrystalHistory.map((entry) => ({ ...entry })),
     sacrificePile: [...state.sacrificePile],
@@ -158,6 +200,8 @@ export const buildPlayerView = (state: GameState, viewerId: string): ClientView 
       nightRecognition: viewer.nightRecognition ? [...viewer.nightRecognition] : null,
       magic9Reveal: viewer.magic9Reveal ? { ...viewer.magic9Reveal } : null,
       magic11Seen: viewer.magic11Seen ? { ...viewer.magic11Seen } : null,
+      canPass: canPass(state, viewerId),
+      isRandomForced: isRandomForcedForView(state, viewerId),
     },
     eventLog: state.eventLog.map(sanitizeEvent),
   };

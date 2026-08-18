@@ -1,13 +1,16 @@
 import type {
   GameCommandMessage,
+  HostDisconnectedMessage,
+  HostErrorMessage,
   JoinAccepted,
   JoinRequest,
   LobbySnapshot,
   MultiplayerTransport,
   NetworkMessage,
   PlayerViewMessage,
+  ReadyCommand,
 } from '@rose-blade/p2p-network';
-import { createMessage } from '@rose-blade/p2p-network';
+import { createMessage, makeSessionId } from '@rose-blade/p2p-network';
 import type { ClientView } from '@rose-blade/game-engine';
 import type { GameCommand } from '../game/HostGameController';
 
@@ -18,6 +21,8 @@ export interface NetworkPeerState {
   lastError: string | null;
 }
 
+export type PeerCommand = Omit<GameCommand, 'playerId'>;
+
 export class NetworkPeer {
   state: NetworkPeerState = {
     playerId: null,
@@ -27,12 +32,21 @@ export class NetworkPeer {
   };
 
   private listeners = new Set<() => void>();
+  private readonly sessionId: string;
 
   constructor(
     private readonly transport: MultiplayerTransport,
     private readonly peerId: string,
   ) {
+    this.sessionId = makeSessionId();
     this.transport.onMessage((message) => this.handleMessage(message));
+    this.transport.onPeerDisconnected(() => {
+      this.state = {
+        ...this.state,
+        lastError: '房主已离开。当前对局无法继续。',
+      };
+      this.emit();
+    });
   }
 
   subscribe(listener: () => void): () => void {
@@ -44,20 +58,34 @@ export class NetworkPeer {
 
   join(roomId: string, nickname: string): void {
     const message = createMessage<JoinRequest>('JOIN_REQUEST', {
-      playerId: this.peerId,
       roomId,
       nickname,
+      sessionId: this.sessionId,
     });
     this.transport.send(message);
   }
 
-  sendCommand(command: GameCommand): void {
+  setReady(ready: boolean): void {
+    const message = createMessage<ReadyCommand>('READY_COMMAND', {
+      ...(this.state.room ? { roomId: this.state.room.roomId } : {}),
+      sessionId: this.sessionId,
+      ready,
+    });
+    this.transport.send(message);
+  }
+
+  sendCommand(command: PeerCommand): void {
     if (!this.state.playerId) return;
     const message = createMessage<GameCommandMessage>('GAME_COMMAND', {
-      playerId: this.state.playerId,
+      ...(this.state.room ? { roomId: this.state.room.roomId } : {}),
+      sessionId: this.sessionId,
       payload: command,
     });
     this.transport.send(message);
+  }
+
+  disconnect(): void {
+    this.transport.disconnect();
   }
 
   private handleMessage(message: NetworkMessage): void {
@@ -99,9 +127,18 @@ export class NetworkPeer {
       return;
     }
     if (message.type === 'HOST_ERROR') {
+      const errorMessage = message as HostErrorMessage;
       this.state = {
         ...this.state,
-        lastError: message.payload.message,
+        lastError: errorMessage.payload.message,
+      };
+      this.emit();
+    }
+    if (message.type === 'HOST_DISCONNECTED') {
+      const hostLeft = message as HostDisconnectedMessage;
+      this.state = {
+        ...this.state,
+        lastError: hostLeft.payload.message,
       };
       this.emit();
     }

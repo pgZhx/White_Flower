@@ -1,12 +1,12 @@
 # P2P 网络方案说明
 
-> 状态：MVP 已实现 Transport 抽象与 PeerJS WebRTC Transport
+> 状态：真实 P2P 联机 MVP 已实现
 > 我们的应用没有自己的游戏后端，但 P2P 建连依赖第三方公共信令/穿透基础设施。
 
 ## 1. 核心结论
 
 - 游戏本体完全在浏览器中运行。
-- 房主浏览器是 authoritative host，持有完整 GameState。
+- 房主浏览器是 authoritative host，持有完整 GameState 与唯一 GameEngine。
 - 普通玩家只向房主发送命令，并接收自己的 PlayerView。
 - WebRTC DataChannel 负责真实设备之间的点对点数据传输。
 - 我们不开发、不维护游戏后端/Signaling Server/Database。
@@ -22,14 +22,43 @@ WebRTC 本身不能自动发现对方或交换 SDP/ICE。
 - 实际媒体/数据通道仍然是 WebRTC DataChannel，数据不经过我们的服务器。
 - 部分 NAT 环境可能需要 STUN/TURN，PeerJS 默认包含公共 STUN，复杂网络可能需要额外 TURN。
 
-## 3. 当前实现
+## 3. 房间码即 Host Peer ID
+
+房间码不是后端生成的临时码，而是房主 PeerJS Peer ID：
+
+```text
+创建房间
+  generateRoomCode() -> "AB7K2P"
+  new Peer("AB7K2P")
+  https://site.example/?room=AB7K2P
+
+加入房间
+  peer.connect("AB7K2P")
+```
+
+不需要数据库、不需要 Socket.IO、不需要 Node 后端。
+如果 PeerJS 返回 ID 不可用，会自动重新生成房间码并重试。
+
+## 4. 当前实现结构
 
 ```text
 packages/p2p-network/src/
 ├── types.ts            # NetworkMessage / RoomState / Transport 接口
 ├── protocol.ts         # 带 version/messageId 的消息构造
+├── roomCode.ts         # 房间码 / PeerId / PlayerId / SessionId 生成
 ├── localTransport.ts   # 单浏览器模拟 / 测试用
 └── webRtcTransport.ts  # PeerJS WebRTC DataChannel Transport
+
+packages/web-client/src/
+├── game/
+│   ├── HostGameController.ts   # 房主权威控制器（唯一允许持有 GameEngine）
+│   ├── HostGameClient.ts       # React 统一接口：房主实现
+│   ├── PeerGameClient.ts       # React 统一接口：普通玩家实现
+│   └── GameClient.ts           # 统一客户端接口
+├── network/
+│   ├── NetworkHost.ts          # 房主网络层：Peer→Player 映射、命令路由、视图分发
+│   └── NetworkPeer.ts          # 普通玩家网络层：只发命令、只收自己的 PlayerView
+└── screens/                    # Home / Connecting / Lobby / Game
 ```
 
 ### Transport 抽象
@@ -37,36 +66,89 @@ packages/p2p-network/src/
 ```ts
 interface MultiplayerTransport {
   connect(): Promise<void>;
-  sendTo(playerId: string, message: NetworkMessage): void;
+  sendTo(peerId: string, message: NetworkMessage): void;
   send(message: NetworkMessage): void;
   broadcast(message: NetworkMessage): void;
-  onMessage(handler): Unsubscribe;
+  onMessage(handler: (message, fromPeerId?) => void): Unsubscribe;
+  onPeerConnected(handler: (peerId) => void): Unsubscribe;
+  onPeerDisconnected(handler: (peerId) => void): Unsubscribe;
   disconnect(): void;
 }
 ```
 
-### 消息协议
+`sendTo` 的第一个参数始终是 **PeerId**，不是 PlayerId。
 
-所有消息至少包含：
+## 5. 身份分层
 
 ```ts
-{
-  version: 1,
-  type: string,
-  messageId: string
-}
+type PeerId = string;      // PeerJS DataConnection 的身份
+type PlayerId = string;    // 房主为每位玩家分配的游戏内身份
+type SessionId = string;   // 加入者本次会话标识
 ```
 
-类型包括：
+房主维护：
 
-- JOIN_REQUEST / JOIN_ACCEPTED / JOIN_REJECTED
-- LOBBY_SNAPSHOT / PLAYER_READY_CHANGED
-- GAME_COMMAND / PLAYER_VIEW / PUBLIC_EVENT
-- HOST_ERROR / PING
+```ts
+Map<PeerId, PlayerId>
+Map<PlayerId, PeerId>
+```
 
-禁止直接向所有 Peer 广播完整 GameState。
+所有来自 Peer 的 `GAME_COMMAND` 都先通过 `connection.peer` 解析为真实 `PlayerId`，再交给 `GameEngine`。即使命令里携带 `playerId`，房主也会忽略/覆盖。
 
-## 4. 房主生命周期限制
+## 6. Join Flow
+
+```text
+Guest 打开 ?room=AB7K2P
+  → WebRTC DataChannel 连接 Host
+  → 发送 JOIN_REQUEST { nickname, sessionId }
+Host 校验：房间存在、未开始、人数 < 10、昵称合法且不重复
+  → 分配 PlayerId/seat
+  → 保存 PeerId → PlayerId
+  → 返回 JOIN_ACCEPTED + 当前 LobbySnapshot
+  → 广播新 LobbySnapshot 给所有玩家
+```
+
+拒绝原因至少包括：
+
+- ROOM_FULL
+- GAME_ALREADY_STARTED
+- INVALID_NICKNAME
+- DUPLICATE_NICKNAME
+- PROTOCOL_MISMATCH
+
+## 7. Game Command Flow
+
+```text
+Peer UI
+  → PeerGameClient.handleCommand
+  → NetworkPeer.sendCommand (不含 playerId，或忽略 UI 传来的 playerId)
+  → DataConnection
+  → NetworkHost
+  → 根据 connection.peer 解析真实 PlayerId
+  → HostGameController.handleCommand
+  → GameEngine 校验并推进状态
+  → Host 为每个玩家 buildPlayerView
+  → 分别发送 PLAYER_VIEW
+```
+
+## 8. 隐藏信息
+
+- 普通 Peer 只保存自己的 `ClientView`。
+- Host 从不广播完整 `GameState`。
+- Night / Magic 9 / Magic 11 / 手牌 / 身份 / 水晶都通过 `buildPlayerView` 按玩家投影。
+- 普通 Peer 无法在本地构造其他玩家的私人信息。
+
+## 9. 本地模拟调试模式
+
+正常生产 UI 不显示“添加模拟玩家”和“切换查看玩家”。
+
+URL 加上 `?debug=1` 后才会显示：
+
+- Local Simulation Mode 提示
+- 添加模拟玩家
+- 房主切换查看玩家
+
+## 10. 房主生命周期限制
 
 MVP 明确限制：
 
@@ -75,14 +157,19 @@ MVP 明确限制：
 - 其他玩家显示“房主已离开，当前游戏无法继续”，并提供返回首页。
 - 不实现 Host Migration / Dedicated Server / 自动选新房主。
 
-## 5. 部署说明
+普通 Peer 断线：
+
+- Lobby 阶段：房主直接移除该玩家并广播新列表。
+- 游戏阶段：房主将该玩家标记为 disconnected，游戏继续进行或按当前规则处理；MVP 不提供游戏中重连恢复。
+
+## 11. 部署说明
 
 - 前端构建为纯静态站点，可部署到 Vercel / Cloudflare Pages / GitHub Pages / Nginx。
 - 不需要运行 Node.js 游戏服务。
 - 公网联机依赖 PeerJS 公共信令与 STUN；如果遇到严格 NAT，再考虑配置 TURN。
 
-## 6. 后续改进方向
+## 12. 已知网络限制
 
-- 增加 TURN 配置以提升连通率。
-- 增加房间密码/简单邀请校验。
-- 增加断线重连与房主迁移（当前明确不做）。
+- 部分企业网络、校园网、CGNAT、对称 NAT 环境下 P2P 连接可能失败。
+- 当前 MVP 优先覆盖常见家庭网络 / 手机网络。
+- 未来如果实测需要，再考虑自建或配置 TURN。

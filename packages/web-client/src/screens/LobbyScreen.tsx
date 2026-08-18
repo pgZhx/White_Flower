@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
-import type { HostGameController } from '../game/HostGameController';
+import type { GameClient } from '../game/GameClient';
 
 interface LobbyScreenProps {
   roomId: string;
   nickname: string;
   playerId: string;
   isHost: boolean;
-  controller: HostGameController | null;
+  client: GameClient | null;
+  debug: boolean;
   onStart: () => void;
   onLeave: () => void;
 }
@@ -16,7 +17,8 @@ export function LobbyScreen({
   nickname,
   playerId,
   isHost,
-  controller,
+  client,
+  debug,
   onStart,
   onLeave,
 }: LobbyScreenProps) {
@@ -24,26 +26,39 @@ export function LobbyScreen({
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    if (!controller) return;
-    return controller.subscribe(() => setTick((t) => t + 1));
-  }, [controller]);
+    if (!client) return;
+    return client.subscribe(() => setTick((t) => t + 1));
+  }, [client]);
 
-  const players = controller?.room.players ?? [];
-  const canAdd = (controller?.room.players.length ?? 0) < 10;
-  const allReady = (controller?.canStart() ?? false) && players.length >= 5;
+  const room = client?.getLobby();
+  const players = room?.players ?? [];
+  const canAdd = players.length < 10;
+  const allReady = (room?.players.every((p) => p.ready) ?? false) && players.length >= 5 && players.length <= 10;
 
   const addSimulatedPlayer = () => {
-    if (!controller || !canAdd) return;
+    if (!debug || !client || client.isHost !== true || !canAdd) return;
+    // Debug-only local simulation: use the host controller directly through a cast.
+    const debugClient = client as unknown as { addPlayer(nickname: string): void };
     const names = ['艾丽丝', '鲍勃', '卡罗尔', '戴夫', '伊芙', '弗兰克', '格蕾丝', '海蒂', '伊万'];
     const used = new Set(players.map((p) => p.nickname));
     const name = names.find((n) => !used.has(n)) ?? `玩家${players.length + 1}`;
-    controller.addPlayer(name);
+    debugClient.addPlayer(name);
   };
 
   const toggleReady = (id: string) => {
-    if (!controller) return;
-    const player = controller.room.players.find((p) => p.id === id);
-    if (player) {
+    if (!client) return;
+    if (id !== playerId && !debug) return;
+    const player = players.find((p) => p.id === id);
+    if (!player) return;
+    if (client.isHost && id === client.playerId) {
+      client.setReady(!player.ready);
+    } else if (!client.isHost && id === playerId) {
+      client.setReady(!player.ready);
+    } else if (debug && client.isHost) {
+      // In debug local simulation we still allow toggling any player.
+      const controller = client as unknown as {
+        setReady(id: string, ready: boolean): void;
+      };
       controller.setReady(id, !player.ready);
     }
   };
@@ -57,7 +72,9 @@ export function LobbyScreen({
             <p className="mt-1 text-sm text-stone-400">
               房间号：<span className="font-mono text-stone-100">{roomId}</span>
             </p>
-            <p className="text-xs text-stone-500">当前为本地模拟模式，用于单浏览器调试多人流程。</p>
+            {debug && (
+              <p className="text-xs text-stone-500">当前为本地模拟模式，仅用于调试。</p>
+            )}
             <div className="mt-2 flex items-center gap-2 text-xs">
               <code className="rounded bg-stone-950 px-2 py-1 text-stone-300">
                 {typeof window !== 'undefined' ? `${window.location.origin}/?room=${roomId}` : `/?room=${roomId}`}
@@ -89,14 +106,25 @@ export function LobbyScreen({
                 <span>{player.nickname}</span>
                 {player.isHost && <span className="rounded bg-blood px-1.5 py-0.5 text-xs text-white">房主</span>}
                 {player.id === playerId && <span className="rounded bg-stone-700 px-1.5 py-0.5 text-xs text-white">你</span>}
+                {!player.connected && <span className="rounded bg-stone-700 px-1.5 py-0.5 text-xs text-stone-300">掉线</span>}
               </div>
               <div className="flex items-center gap-2">
-                <button
-                  className="rounded border border-stone-600 px-2 py-1 text-xs text-stone-300 hover:bg-stone-700"
-                  onClick={() => toggleReady(player.id)}
-                >
-                  {player.ready ? '取消准备' : '准备'}
-                </button>
+                {player.id === playerId && (
+                  <button
+                    className="rounded border border-stone-600 px-2 py-1 text-xs text-stone-300 hover:bg-stone-700"
+                    onClick={() => toggleReady(player.id)}
+                  >
+                    {player.ready ? '取消准备' : '准备'}
+                  </button>
+                )}
+                {debug && isHost && player.id !== playerId && (
+                  <button
+                    className="rounded border border-stone-600 px-2 py-1 text-xs text-stone-300 hover:bg-stone-700"
+                    onClick={() => toggleReady(player.id)}
+                  >
+                    {player.ready ? '取消准备' : '准备'}
+                  </button>
+                )}
                 <span className={player.ready ? 'text-green-400' : 'text-stone-500'}>
                   {player.ready ? '已准备' : '未准备'}
                 </span>
@@ -110,8 +138,8 @@ export function LobbyScreen({
           )}
         </div>
 
-        {isHost && (
-          <div className="mt-4 flex flex-wrap gap-2">
+        {debug && isHost && (
+          <div className="mt-4">
             <button
               className="rounded bg-stone-700 px-3 py-1.5 text-sm text-white hover:bg-stone-600 disabled:opacity-40"
               disabled={!canAdd}
@@ -123,7 +151,17 @@ export function LobbyScreen({
         )}
 
         <div className="mt-6 flex flex-col gap-2">
-          {!isHost && (
+          {isHost ? (
+            <button
+              className="rounded bg-stone-700 px-4 py-2 font-semibold text-white hover:bg-stone-600"
+              onClick={() => {
+                const hostPlayer = players.find((p) => p.id === playerId);
+                if (hostPlayer) toggleReady(hostPlayer.id);
+              }}
+            >
+              {players.find((p) => p.id === playerId)?.ready ? '取消准备' : '准备'}
+            </button>
+          ) : (
             <button
               className="rounded bg-stone-700 px-4 py-2 font-semibold text-white hover:bg-stone-600"
               onClick={() => toggleReady(playerId)}

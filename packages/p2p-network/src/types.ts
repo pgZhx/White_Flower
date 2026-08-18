@@ -1,13 +1,19 @@
+export type PeerId = string;
+export type PlayerId = string;
+export type SessionId = string;
+
 export type NetworkMessageType =
   | 'JOIN_REQUEST'
   | 'JOIN_ACCEPTED'
   | 'JOIN_REJECTED'
   | 'LOBBY_SNAPSHOT'
+  | 'READY_COMMAND'
   | 'PLAYER_READY_CHANGED'
   | 'GAME_COMMAND'
   | 'PLAYER_VIEW'
   | 'PUBLIC_EVENT'
   | 'HOST_ERROR'
+  | 'HOST_DISCONNECTED'
   | 'PING';
 
 export interface NetworkMessageBase {
@@ -16,6 +22,7 @@ export interface NetworkMessageBase {
   messageId: string;
   roomId?: string;
   playerId?: string;
+  sessionId?: string;
 }
 
 export interface JoinRequest extends NetworkMessageBase {
@@ -34,12 +41,17 @@ export interface JoinAccepted extends NetworkMessageBase {
 
 export interface JoinRejected extends NetworkMessageBase {
   type: 'JOIN_REJECTED';
-  payload: { reason: string };
+  payload: { reason: string; code?: string };
 }
 
 export interface LobbySnapshot extends NetworkMessageBase {
   type: 'LOBBY_SNAPSHOT';
   payload: { roomState: RoomState };
+}
+
+export interface ReadyCommand extends NetworkMessageBase {
+  type: 'READY_COMMAND';
+  ready: boolean;
 }
 
 export interface PlayerReadyChanged extends NetworkMessageBase {
@@ -67,6 +79,11 @@ export interface HostErrorMessage extends NetworkMessageBase {
   payload: { code: string; message: string };
 }
 
+export interface HostDisconnectedMessage extends NetworkMessageBase {
+  type: 'HOST_DISCONNECTED';
+  payload: { message: string };
+}
+
 export interface PingMessage extends NetworkMessageBase {
   type: 'PING';
   payload: { timestamp: number };
@@ -77,11 +94,13 @@ export type NetworkMessage =
   | JoinAccepted
   | JoinRejected
   | LobbySnapshot
+  | ReadyCommand
   | PlayerReadyChanged
   | GameCommandMessage
   | PlayerViewMessage
   | PublicEventMessage
   | HostErrorMessage
+  | HostDisconnectedMessage
   | PingMessage;
 
 export interface RoomPlayer {
@@ -103,10 +122,13 @@ export interface RoomState {
 export type Unsubscribe = () => void;
 
 export interface MultiplayerTransport {
+  readonly id?: string;
   connect(): Promise<void>;
-  sendTo(playerId: string, message: NetworkMessage): void;
+  sendTo(peerId: string, message: NetworkMessage): void;
   send(message: NetworkMessage): void;
   broadcast(message: NetworkMessage): void;
-  onMessage(handler: (message: NetworkMessage) => void): Unsubscribe;
+  onMessage(handler: (message: NetworkMessage, fromPeerId?: string) => void): Unsubscribe;
+  onPeerConnected(handler: (peerId: string) => void): Unsubscribe;
+  onPeerDisconnected(handler: (peerId: string) => void): Unsubscribe;
   disconnect(): void;
 }

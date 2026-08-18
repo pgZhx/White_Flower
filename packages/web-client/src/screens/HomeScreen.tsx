@@ -2,21 +2,9 @@ import { useState } from 'react';
 
 interface HomeScreenProps {
   initialRoom?: string | undefined;
-  onCreate: (nickname: string, roomId: string, playerId: string) => void;
-  onJoin: (nickname: string, roomId: string, playerId: string) => void;
+  onCreate: (nickname: string) => void;
+  onJoin: (nickname: string, roomId: string) => void;
 }
-
-const generateRoomId = (): string => {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  let id = '';
-  for (let i = 0; i < 6; i += 1) {
-    id += chars[Math.floor(Math.random() * chars.length)];
-  }
-  return id;
-};
-
-const makePlayerId = (): string =>
-  `player_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
 export function HomeScreen({ initialRoom, onCreate, onJoin }: HomeScreenProps) {
   const [nickname, setNickname] = useState('');
@@ -24,13 +12,12 @@ export function HomeScreen({ initialRoom, onCreate, onJoin }: HomeScreenProps) {
 
   const handleCreate = () => {
     if (!nickname.trim()) return;
-    const id = generateRoomId();
-    onCreate(nickname.trim(), id, makePlayerId());
+    onCreate(nickname.trim());
   };
 
   const handleJoin = () => {
     if (!nickname.trim() || !roomId.trim()) return;
-    onJoin(nickname.trim(), roomId.trim().toUpperCase(), makePlayerId());
+    onJoin(nickname.trim(), roomId.trim().toUpperCase());
   };
 
   return (

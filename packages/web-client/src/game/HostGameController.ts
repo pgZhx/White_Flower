@@ -69,10 +69,10 @@ export class HostGameController {
     }
   }
 
-  addPlayer(nickname: string): RoomPlayer {
+  addPlayer(nickname: string, playerId?: string): RoomPlayer {
     const isFirst = this.room.players.length === 0;
     const player: RoomPlayer = {
-      id: isFirst ? this.hostPlayerId : `local_${this.room.players.length + 1}_${Date.now().toString(36)}`,
+      id: playerId ?? (isFirst ? this.hostPlayerId : `local_${this.room.players.length + 1}_${Date.now().toString(36)}`),
       nickname,
       seat: this.room.players.length,
       ready: false,
@@ -85,6 +85,24 @@ export class HostGameController {
     };
     this.emit();
     return player;
+  }
+
+  removePlayer(playerId: string): void {
+    this.room = {
+      ...this.room,
+      players: this.room.players.filter((p) => p.id !== playerId),
+    };
+    this.emit();
+  }
+
+  setPlayerConnected(playerId: string, connected: boolean): void {
+    this.room = {
+      ...this.room,
+      players: this.room.players.map((p) =>
+        p.id === playerId ? { ...p, connected } : p,
+      ),
+    };
+    this.emit();
   }
 
   addLocalPlayers(count: number): RoomPlayer[] {

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Card, ClientView } from '@rose-blade/game-engine';
-import type { HostGameController } from '../game/HostGameController';
+import type { GameClient } from '../game/GameClient';
 import { cardLabel, factionLabel, formatPile, phaseLabel, roleLabel } from '../game/labels';
 
 interface GameScreenProps {
@@ -8,7 +8,8 @@ interface GameScreenProps {
   nickname: string;
   playerId: string;
   isHost: boolean;
-  controller: HostGameController | null;
+  client: GameClient | null;
+  debug: boolean;
   onExit: () => void;
 }
 
@@ -27,37 +28,37 @@ const magicNames: Record<number, string> = {
   12: '强制出牌',
 };
 
-export function GameScreen({ roomId, nickname, isHost, controller, onExit }: GameScreenProps) {
+export function GameScreen({ roomId, nickname, isHost, client, debug, onExit }: GameScreenProps) {
   const [, setTick] = useState(0);
   const [viewAs, setViewAs] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!controller) return;
-    return controller.subscribe(() => setTick((t) => t + 1));
-  }, [controller]);
+    if (!client) return;
+    return client.subscribe(() => setTick((t) => t + 1));
+  }, [client]);
 
-  const players = controller?.room.players ?? [];
-  const activeViewerId = viewAs ?? controller?.hostPlayerId ?? '';
-  const view = controller?.getView(activeViewerId) ?? null;
-  const phase = controller?.phase ?? 'LOBBY';
+  const players = client?.players ?? [];
+  const activeViewerId = viewAs ?? client?.playerId ?? '';
+  const view = client?.getView(activeViewerId) ?? null;
+  const phase = (client?.phase ?? 'LOBBY') as ClientView['phase'] | 'LOBBY';
   const myPlayer = players.find((p) => p.id === activeViewerId);
 
   const confirmIdentity = () => {
-    if (controller && activeViewerId) {
-      controller.confirmIdentity(activeViewerId);
+    if (client && activeViewerId) {
+      client.confirmIdentity(activeViewerId);
     }
   };
 
   const confirmAll = () => {
-    if (!controller) return;
-    for (const p of controller.room.players) {
-      controller.confirmIdentity(p.id);
+    if (!client) return;
+    for (const p of client.players) {
+      client.confirmIdentity(p.id);
     }
   };
 
-  const gameOver = controller?.getGameOverSnapshot();
+  const gameOver = client?.getGameOverSnapshot();
 
-  if (!controller || !view) {
+  if (!client || !view) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-cathedral">
         <p className="text-stone-400">正在进入游戏…</p>
@@ -77,11 +78,12 @@ export function GameScreen({ roomId, nickname, isHost, controller, onExit }: Gam
           players={players}
           activeViewerId={activeViewerId}
           onViewAs={setViewAs}
+          debug={debug}
           onExit={onExit}
         />
 
-        {phase === 'NIGHT_RECOGNITION' && !controller.allIdentitiesConfirmed && (
-          <IdentityPanel view={view} onConfirm={confirmIdentity} onConfirmAll={isHost ? confirmAll : undefined} />
+        {phase === 'NIGHT_RECOGNITION' && !client.allIdentitiesConfirmed && (
+          <IdentityPanel view={view} onConfirm={confirmIdentity} onConfirmAll={debug && isHost ? confirmAll : undefined} />
         )}
 
         {phase === 'NIGHT_DOUBLE_KNIFE' && (
@@ -92,7 +94,7 @@ export function GameScreen({ roomId, nickname, isHost, controller, onExit }: Gam
           <CoinPhasePanel
             view={view}
             activePlayerId={activeViewerId}
-            onSelect={(targetId) => controller.handleCommand({ type: 'SELECT_COIN_TARGET', playerId: activeViewerId, targetId })}
+            onSelect={(targetId) => client.handleCommand({ type: 'SELECT_COIN_TARGET', playerId: activeViewerId, targetId })}
           />
         )}
 
@@ -102,7 +104,7 @@ export function GameScreen({ roomId, nickname, isHost, controller, onExit }: Gam
             activePlayerId={activeViewerId}
             magicId={view.round.magicNumber}
             onResolve={(targetIds, magic6Choice) =>
-              controller.handleCommand({
+              client.handleCommand({
                 type: 'RESOLVE_MAGIC',
                 playerId: activeViewerId,
                 targetIds,
@@ -116,25 +118,25 @@ export function GameScreen({ roomId, nickname, isHost, controller, onExit }: Gam
           <ActionPanel
             view={view}
             activePlayerId={activeViewerId}
-            controller={controller}
+            client={client}
           />
         )}
 
         {phase === 'PRE_REVEAL_MAGIC' && (
-          <Magic10Panel view={view} activePlayerId={activeViewerId} controller={controller} />
+          <Magic10Panel view={view} activePlayerId={activeViewerId} client={client} />
         )}
 
         {phase === 'ROUND_REVEAL' && (
           <RevealPanel
             view={view}
-            onReveal={() => controller.handleCommand({ type: 'REVEAL', playerId: activeViewerId })}
+            onReveal={() => client.handleCommand({ type: 'REVEAL', playerId: activeViewerId })}
           />
         )}
 
         {phase === 'ROUND_RESOLUTION' && (
           <ResolutionPanel
             view={view}
-            onContinue={() => controller.handleCommand({ type: 'RESOLVE_ROUND', playerId: activeViewerId })}
+            onContinue={() => client.handleCommand({ type: 'RESOLVE_ROUND', playerId: activeViewerId })}
             mode="reveal"
           />
         )}
@@ -142,7 +144,7 @@ export function GameScreen({ roomId, nickname, isHost, controller, onExit }: Gam
         {phase === 'CHECK_VICTORY' && (
           <ResolutionPanel
             view={view}
-            onContinue={() => controller.handleCommand({ type: 'CHECK_VICTORY', playerId: activeViewerId })}
+            onContinue={() => client.handleCommand({ type: 'CHECK_VICTORY', playerId: activeViewerId })}
             mode="resolution"
           />
         )}
@@ -191,6 +193,7 @@ function Header({
   players,
   activeViewerId,
   onViewAs,
+  debug,
   onExit,
 }: {
   roomId: string;
@@ -201,6 +204,7 @@ function Header({
   players: { id: string; nickname: string }[];
   activeViewerId: string;
   onViewAs: (id: string) => void;
+  debug: boolean;
   onExit: () => void;
 }) {
   return (
@@ -212,7 +216,7 @@ function Header({
         </p>
       </div>
       <div className="flex items-center gap-2">
-        {isHost && players.length > 0 && (
+        {debug && isHost && players.length > 0 && (
           <select
             className="rounded border border-stone-700 bg-stone-950 px-2 py-1 text-sm"
             value={activeViewerId}
@@ -419,17 +423,17 @@ function MagicResolutionPanel({
 function ActionPanel({
   view,
   activePlayerId,
-  controller,
+  client,
 }: {
   view: ClientView;
   activePlayerId: string;
-  controller: HostGameController;
+  client: GameClient;
 }) {
-  const currentPlayerId = controller.currentPlayerId;
+  const currentPlayerId = client.currentPlayerId;
   const isMyTurn = currentPlayerId === activePlayerId;
   const [selectedCard, setSelectedCard] = useState<Card | null>(null);
-  const canPass = controller.canPass(activePlayerId);
-  const randomForced = controller.isRandomForced(activePlayerId);
+  const canPass = client.canPass(activePlayerId);
+  const randomForced = client.isRandomForced(activePlayerId);
 
   if (!isMyTurn) {
     const current = view.players.find((p) => p.id === currentPlayerId);
@@ -442,11 +446,11 @@ function ActionPanel({
 
   const play = () => {
     if (randomForced) {
-      controller.handleCommand({ type: 'PLAY_CARD', playerId: activePlayerId, card: view.me.hand[0]! });
+      client.handleCommand({ type: 'PLAY_CARD', playerId: activePlayerId, card: view.me.hand[0]! });
       return;
     }
     if (!selectedCard) return;
-    controller.handleCommand({ type: 'PLAY_CARD', playerId: activePlayerId, card: selectedCard });
+    client.handleCommand({ type: 'PLAY_CARD', playerId: activePlayerId, card: selectedCard });
   };
 
   return (
@@ -478,7 +482,7 @@ function ActionPanel({
         {canPass && (
           <button
             className="rounded border border-stone-600 px-4 py-2 text-stone-300 hover:bg-stone-700"
-            onClick={() => controller.handleCommand({ type: 'PASS', playerId: activePlayerId })}
+            onClick={() => client.handleCommand({ type: 'PASS', playerId: activePlayerId })}
           >
             跳过
           </button>
@@ -491,13 +495,13 @@ function ActionPanel({
 function Magic10Panel({
   view,
   activePlayerId,
-  controller,
+  client,
 }: {
   view: ClientView;
   activePlayerId: string;
-  controller: HostGameController;
+  client: GameClient;
 }) {
-  const pending = controller.getPendingMagic10();
+  const pending = client.getPendingMagic10();
   if (!pending) return <Panel title="换牌">等待魔法结算…</Panel>;
 
   if (!pending.targetId) {
@@ -513,7 +517,7 @@ function Magic10Panel({
         <div className="mt-3 flex flex-wrap gap-2">
           <button
             className="rounded border border-stone-600 px-4 py-2 text-stone-300 hover:bg-stone-700"
-            onClick={() => controller.handleCommand({ type: 'MAGIC10_TARGET', playerId: activePlayerId, targetId: null })}
+            onClick={() => client.handleCommand({ type: 'MAGIC10_TARGET', playerId: activePlayerId, targetId: null })}
           >
             不发动
           </button>
@@ -521,7 +525,7 @@ function Magic10Panel({
             <button
               key={p.id}
               className="rounded border border-rose px-4 py-2 text-rose hover:bg-rose hover:text-stone-900"
-              onClick={() => controller.handleCommand({ type: 'MAGIC10_TARGET', playerId: activePlayerId, targetId: p.id })}
+              onClick={() => client.handleCommand({ type: 'MAGIC10_TARGET', playerId: activePlayerId, targetId: p.id })}
             >
               {p.nickname}
             </button>
@@ -542,7 +546,7 @@ function Magic10Panel({
           <button
             key={`${card}-${i}`}
             className="rounded border border-rose px-4 py-2 text-rose hover:bg-rose hover:text-stone-900"
-            onClick={() => controller.handleCommand({ type: 'MAGIC10_REPLACEMENT', playerId: activePlayerId, replacementCard: card })}
+            onClick={() => client.handleCommand({ type: 'MAGIC10_REPLACEMENT', playerId: activePlayerId, replacementCard: card })}
           >
             {cardLabel(card)}
           </button>
@@ -615,7 +619,7 @@ function GameOverPanel({
   gameOver,
   onExit,
 }: {
-  gameOver: NonNullable<ReturnType<HostGameController['getGameOverSnapshot']>>;
+  gameOver: NonNullable<ReturnType<GameClient['getGameOverSnapshot']>>;
   onExit: () => void;
 }) {
   return (
