@@ -104,6 +104,7 @@ export type Unsubscribe = () => void;
 
 export interface MultiplayerTransport {
   connect(): Promise<void>;
+  sendTo(playerId: string, message: NetworkMessage): void;
   send(message: NetworkMessage): void;
   broadcast(message: NetworkMessage): void;
   onMessage(handler: (message: NetworkMessage) => void): Unsubscribe;

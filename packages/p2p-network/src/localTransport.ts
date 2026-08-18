@@ -16,6 +16,10 @@ export class LocalTransport implements MultiplayerTransport {
     this.peer = peer;
   }
 
+  sendTo(_playerId: string, message: NetworkMessage): void {
+    this.send(message);
+  }
+
   send(message: NetworkMessage): void {
     if (!this.peer) {
       throw new Error('LocalTransport has no linked peer');
