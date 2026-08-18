@@ -1,111 +1,68 @@
-# 部署架构调整分析
+# 部署架构与环境说明
 
-> 最后更新：Phase 1.5
+> 最后更新：迁移至纯前端 Web 版本前（Phase 0）
+> 历史说明：本文早期版本描述的是导师实验室服务器环境；当前环境已迁移为个人腾讯云轻量服务器。
 
-## 1. 环境定位
+## 1. 当前环境定位
 
-当前服务器是导师租用的科研项目服务器，账号是老师提供的公共账号。
+- 当前服务器：**个人腾讯云轻量服务器**。
+- 当前用户：拥有 **sudo 权限**。
+- 可以安装系统级依赖，可以正常使用 sudo。
+- 不再是共享实验室服务器，不再需要遵守“禁止 sudo / 不能全局安装”的旧限制。
+- 项目早期曾在导师实验室服务器上开发，相关历史限制已经失效；历史记录保留在 git 中。
 
-因此明确：
+## 2. 当前项目结构
 
-- **当前实验室服务器只作为开发环境。**
-- **不允许长期在生产环境运行本项目后端。**
-- 未来购买独立的小型云服务器后，再将服务部署到该服务器。
-- AI 或任何自动化工具涉及本项目目录以外的操作，都必须先询问用户。
-
-## 2. 当前项目是否方便迁移
-
-结论：**当前项目结构适合未来迁移到独立云服务器。**
+结论：**Game Engine 已独立成包，适合作为纯前端多人桌游的核心复用。**
 
 原因：
 
-- Game Engine 位于独立包：
-
-  ```text
-  packages/game-engine
-  ```
-
-  不依赖 React、不依赖 Socket.IO、不依赖浏览器环境。
-
-- 项目依赖全部声明在：
-
-  ```text
-  package.json
-  packages/game-engine/package.json
-  ```
-
-  没有依赖系统级全局包。
-
-- 未来新增 Server 和 Web 时，建议继续采用 npm workspaces：
+- `packages/game-engine` 不依赖 React、不依赖 Socket.IO、不依赖 Node.js 专有 API。
+- 项目依赖全部声明在 `package.json` / `packages/game-engine/package.json`，没有系统级全局依赖。
+- 下一阶段新增 `web-client` 与 `p2p-network` 时，建议继续采用 npm workspaces：
 
   ```text
   packages/
     game-engine/
-    server/
-    web/
+    web-client/
+    p2p-network/
   ```
 
-- 数据库/缓存目前未引入，迁移成本低。
-- 若未来使用 Redis / PostgreSQL，也建议通过 Docker Compose 或云数据库托管，不绑定当前服务器。
+- 当前未引入数据库/缓存，纯前端 P2P 阶段无需后端。
 
-## 3. 目标部署架构
+## 3. 目标部署架构（纯前端 MVP）
 
 ```text
 朋友浏览器
     ↓
-Cloudflare Tunnel / 云服务器公网 IP
+打开静态站点（Vercel / Cloudflare Pages / 腾讯云静态托管 / 本地局域网）
     ↓
-反向代理（Nginx / Caddy）
+React / Next.js Frontend（web-client）
     ↓
-Node.js Game Server（Socket.IO + HTTP）
+Game Engine（浏览器内运行）
     ↓
-Game Engine
+P2P Communication Layer（WebRTC DataChannel，或 MVP 先单浏览器模拟）
 ```
 
-## 4. 当前实验室服务器 vs 未来云服务器
+## 4. 环境变化对照
 
-| 项目 | 当前实验室服务器 | 未来独立云服务器 |
+| 项目 | 旧实验室服务器 | 当前腾讯云轻量服务器 |
 |---|---|---|
-| 定位 | 开发、测试、写代码 | 运行正式服务 |
-| 数据 | 可以只保留源码和测试 | 需要运行 Web + Socket.IO |
-| 公网 | 不适合直接暴露 | 可绑定域名/公网 IP |
-| 资源 | 大机器，但共享/公共 | 小机器，专用于本项目 |
-| 风险 | 不能影响导师科研任务 | 可自由安装运行环境 |
+| 定位 | 共享科研/开发机 | 个人开发与部署机 |
+| sudo | 不可用 | 可用 |
+| 全局依赖 | 禁止 | 允许 |
+| 生产服务 | 不适合长期运行 | 可运行 Web 静态站点或 Node 服务 |
+| 项目操作边界 | 需要严格询问 | 仍建议谨慎，但不再有硬性禁止 |
 
-## 5. 迁移时需要带走的内容
+## 5. 迁移/部署注意事项
 
-```text
-源码：
-  packages/
-  docs/
-  package.json
-  package-lock.json
-  tsconfig.base.json
-  README.md
+- 纯前端版本优先使用静态托管，不需要维护后端进程。
+- 若后续需要信令服务器辅助 WebRTC，再考虑轻量 Node/Serverless 服务。
+- 密钥和配置不要提交到仓库，使用 `.env.example` 管理。
+- 即使拥有 sudo，也应优先使用项目内依赖和普通用户运行服务。
+- 使用 Docker 时，确保 Dockerfile/compose 都在项目内。
 
-运行依赖：
-  在云服务器上执行 npm install 即可，不需要拷贝 node_modules
+## 6. 历史遗留说明
 
-环境变量/配置：
-  端口
-  Socket.IO CORS
-  未来的 Redis/PostgreSQL 连接串
-  未来的管理员/密钥等
-```
-
-## 6. 迁移注意事项
-
-- 不要在实验室服务器上运行长期后台服务。
-- 不要把生产数据库、密钥、正式域名绑到实验室服务器。
-- 建议所有配置通过环境变量或 `.env.example` 管理，避免硬编码。
-- 未来云服务器建议使用非 root 用户运行服务。
-- 如果使用 Docker，确保 Dockerfile 和 compose 文件都在项目内。
-
-## 7. 当前建议
-
-Phase 2 开发时仍然在实验室服务器本地进行：
-
-- 启动开发服务器只用于联调。
-- 需要给朋友临时测试时，优先使用 Cloudflare Tunnel 等临时隧道。
-- 不在实验室服务器上做 systemd 常驻服务。
-- 正式部署放到未来购买的云服务器。
+- 旧文档中的“实验室服务器限制”“公共账号”“不能全局安装”等内容仅代表过去环境，已不再适用。
+- 项目 git 历史保留完整开发记录，不删除旧说明。

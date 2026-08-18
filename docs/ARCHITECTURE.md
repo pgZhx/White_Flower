@@ -1,5 +1,9 @@
 # Rose & Blade Online — 架构说明
 
+> 本文档对应第一阶段“独立 Game Engine”的架构。
+> 下一阶段将迁移为纯前端多人桌游，浏览器直接运行 Game Engine，并通过 P2P 同步；
+> 详细迁移分析见 `docs/FRONTEND_MIGRATION_ANALYSIS.md`。
+
 ## 目标
 
 第一阶段只实现独立、可测试、服务器权威的 Game Engine。
