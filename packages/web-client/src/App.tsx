@@ -110,6 +110,27 @@ export default function App() {
     setInitialRoom(readRoomParam());
   }, []);
 
+  useEffect(() => {
+    if (!client) return;
+    return client.subscribe(() => {
+      const view = client.getView();
+      if (view && view.phase !== 'LOBBY' && view.phase !== 'SETUP') {
+        setScreen((prev) => {
+          if (prev.name === 'lobby' || prev.name === 'connecting') {
+            return {
+              name: 'game',
+              roomId: client.roomId,
+              nickname: prev.name === 'lobby' ? prev.nickname : '',
+              playerId: prev.name === 'lobby' ? prev.playerId : (client.playerId ?? ''),
+              isHost: client.isHost,
+            };
+          }
+          return prev;
+        });
+      }
+    });
+  }, [client]);
+
   const handleCreate = async (nickname: string) => {
     if (debugMode) {
       const roomId = generateRoomCode();
