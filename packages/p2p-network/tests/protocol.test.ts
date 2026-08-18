@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createMessage } from '../src/index.js';
-import type { JoinRequest, RoomState } from '../src/index.js';
+import type { JoinRequest, LobbySnapshot, RoomState } from '../src/index.js';
 
 describe('protocol', () => {
   it('creates a versioned message with messageId', () => {
@@ -21,7 +21,7 @@ describe('protocol', () => {
       players: [],
       status: 'LOBBY',
     };
-    const msg = createMessage('LOBBY_SNAPSHOT', { payload: { roomState: room } });
+    const msg = createMessage<LobbySnapshot>('LOBBY_SNAPSHOT', { payload: { roomState: room } });
     expect(msg.type).toBe('LOBBY_SNAPSHOT');
     expect(msg.payload.roomState.roomId).toBe('ABC123');
   });

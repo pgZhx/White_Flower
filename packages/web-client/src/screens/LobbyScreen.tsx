@@ -1,27 +1,51 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import type { HostGameController } from '../game/HostGameController';
 
 interface LobbyScreenProps {
   roomId: string;
   nickname: string;
   playerId: string;
   isHost: boolean;
+  controller: HostGameController | null;
   onStart: () => void;
   onLeave: () => void;
 }
 
-const fakePlayers = [
-  { id: 'p1', nickname: '你', seat: 0, ready: true, isHost: true },
-  { id: 'p2', nickname: 'Alice', seat: 1, ready: true, isHost: false },
-  { id: 'p3', nickname: 'Bob', seat: 2, ready: false, isHost: false },
-  { id: 'p4', nickname: 'Carol', seat: 3, ready: false, isHost: false },
-  { id: 'p5', nickname: 'Dave', seat: 4, ready: false, isHost: false },
-];
+export function LobbyScreen({
+  roomId,
+  nickname,
+  playerId,
+  isHost,
+  controller,
+  onStart,
+  onLeave,
+}: LobbyScreenProps) {
+  const [, setTick] = useState(0);
 
-export function LobbyScreen({ roomId, nickname, isHost, onStart, onLeave }: LobbyScreenProps) {
-  const [players] = useState(fakePlayers);
-  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    if (!controller) return;
+    return controller.subscribe(() => setTick((t) => t + 1));
+  }, [controller]);
 
-  const allReady = players.length >= 5 && players.every((p) => p.ready);
+  const players = useMemo(() => controller?.room.players ?? [], [controller, nickname, playerId, roomId]);
+  const canAdd = (controller?.room.players.length ?? 0) < 10;
+  const allReady = (controller?.canStart() ?? false) && players.length >= 5;
+
+  const addSimulatedPlayer = () => {
+    if (!controller || !canAdd) return;
+    const names = ['Alice', 'Bob', 'Carol', 'Dave', 'Eve', 'Frank', 'Grace', 'Heidi', 'Ivan'];
+    const used = new Set(players.map((p) => p.nickname));
+    const name = names.find((n) => !used.has(n)) ?? `Player${players.length + 1}`;
+    controller.addPlayer(name);
+  };
+
+  const toggleReady = (id: string) => {
+    if (!controller) return;
+    const player = controller.room.players.find((p) => p.id === id);
+    if (player) {
+      controller.setReady(id, !player.ready);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-cathedral px-4 py-8">
@@ -29,10 +53,16 @@ export function LobbyScreen({ roomId, nickname, isHost, onStart, onLeave }: Lobb
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-serif text-rose">房间</h1>
-            <p className="mt-1 text-sm text-stone-400">房间号：<span className="font-mono text-stone-100">{roomId}</span></p>
+            <p className="mt-1 text-sm text-stone-400">
+              房间号：<span className="font-mono text-stone-100">{roomId}</span>
+            </p>
+            <p className="text-xs text-stone-500">当前为本地模拟模式，用于单浏览器调试多人流程。</p>
           </div>
-          <button onClick={onLeave} className="text-sm text-stone-400 hover:text-stone-100">离开</button>
+          <button onClick={onLeave} className="text-sm text-stone-400 hover:text-stone-100">
+            离开
+          </button>
         </div>
+
         <div className="mt-6 space-y-2">
           {players.map((player) => (
             <div key={player.id} className="flex items-center justify-between rounded border border-stone-800 bg-stone-950 px-4 py-2">
@@ -40,20 +70,47 @@ export function LobbyScreen({ roomId, nickname, isHost, onStart, onLeave }: Lobb
                 <span className="text-stone-500">#{player.seat + 1}</span>
                 <span>{player.nickname}</span>
                 {player.isHost && <span className="rounded bg-blood px-1.5 py-0.5 text-xs text-white">房主</span>}
+                {player.id === playerId && <span className="rounded bg-stone-700 px-1.5 py-0.5 text-xs text-white">你</span>}
               </div>
-              <span className={player.ready ? 'text-green-400' : 'text-stone-500'}>
-                {player.ready ? '已准备' : '未准备'}
-              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  className="rounded border border-stone-600 px-2 py-1 text-xs text-stone-300 hover:bg-stone-700"
+                  onClick={() => toggleReady(player.id)}
+                >
+                  {player.ready ? '取消准备' : '准备'}
+                </button>
+                <span className={player.ready ? 'text-green-400' : 'text-stone-500'}>
+                  {player.ready ? '已准备' : '未准备'}
+                </span>
+              </div>
             </div>
           ))}
+          {players.length < 5 && (
+            <p className="text-center text-xs text-stone-500">
+              还需要 {5 - players.length} 名玩家才能开始
+            </p>
+          )}
         </div>
+
+        {isHost && (
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button
+              className="rounded bg-stone-700 px-3 py-1.5 text-sm text-white hover:bg-stone-600 disabled:opacity-40"
+              disabled={!canAdd}
+              onClick={addSimulatedPlayer}
+            >
+              添加模拟玩家
+            </button>
+          </div>
+        )}
+
         <div className="mt-6 flex flex-col gap-2">
           {!isHost && (
             <button
               className="rounded bg-stone-700 px-4 py-2 font-semibold text-white hover:bg-stone-600"
-              onClick={() => setReady((v) => !v)}
+              onClick={() => toggleReady(playerId)}
             >
-              {ready ? '取消准备' : '准备'}
+              {players.find((p) => p.id === playerId)?.ready ? '取消准备' : '准备'}
             </button>
           )}
           {isHost && (

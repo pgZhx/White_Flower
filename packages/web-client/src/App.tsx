@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { HomeScreen } from './screens/HomeScreen';
 import { LobbyScreen } from './screens/LobbyScreen';
 import { GameScreen } from './screens/GameScreen';
+import { HostGameController } from './game/HostGameController';
 
 export type Screen =
   | { name: 'home' }
@@ -16,21 +17,39 @@ function readRoomParam(): string | null {
 export default function App() {
   const [screen, setScreen] = useState<Screen>({ name: 'home' });
   const [initialRoom, setInitialRoom] = useState<string | null>(null);
+  const [controller, setController] = useState<HostGameController | null>(null);
 
   useEffect(() => {
     setInitialRoom(readRoomParam());
   }, []);
 
+  const viewerId = screen.name === 'home' ? undefined : screen.playerId;
+
+  const handleCreate = (nickname: string, roomId: string, playerId: string) => {
+    const c = new HostGameController({ roomId, hostPlayerId: playerId });
+    c.addPlayer(nickname);
+    setController(c);
+    setScreen({ name: 'lobby', roomId, nickname, playerId, isHost: true });
+  };
+
+  const handleJoin = (nickname: string, roomId: string, playerId: string) => {
+    // MVP local simulation: join also creates a local controller.
+    // Real WebRTC join will replace this in Stage E.
+    const c = new HostGameController({ roomId, hostPlayerId: 'host_sim' });
+    c.addPlayer('Host');
+    c.addPlayer(nickname);
+    setController(c);
+    setScreen({ name: 'lobby', roomId, nickname, playerId, isHost: false });
+  };
+
+  const controllerForScreen = useMemo(() => controller, [controller]);
+
   if (screen.name === 'home') {
     return (
       <HomeScreen
         initialRoom={initialRoom ?? undefined}
-        onCreate={(nickname, roomId, playerId) =>
-          setScreen({ name: 'lobby', roomId, nickname, playerId, isHost: true })
-        }
-        onJoin={(nickname, roomId, playerId) =>
-          setScreen({ name: 'lobby', roomId, nickname, playerId, isHost: false })
-        }
+        onCreate={handleCreate}
+        onJoin={handleJoin}
       />
     );
   }
@@ -42,16 +61,23 @@ export default function App() {
         nickname={screen.nickname}
         playerId={screen.playerId}
         isHost={screen.isHost}
-        onStart={() =>
-          setScreen({
-            name: 'game',
-            roomId: screen.roomId,
-            nickname: screen.nickname,
-            playerId: screen.playerId,
-            isHost: screen.isHost,
-          })
-        }
-        onLeave={() => setScreen({ name: 'home' })}
+        controller={controllerForScreen}
+        onStart={() => {
+          if (controllerForScreen) {
+            controllerForScreen.startGame();
+            setScreen({
+              name: 'game',
+              roomId: screen.roomId,
+              nickname: screen.nickname,
+              playerId: screen.playerId,
+              isHost: screen.isHost,
+            });
+          }
+        }}
+        onLeave={() => {
+          setController(null);
+          setScreen({ name: 'home' });
+        }}
       />
     );
   }
@@ -62,7 +88,11 @@ export default function App() {
       nickname={screen.nickname}
       playerId={screen.playerId}
       isHost={screen.isHost}
-      onExit={() => setScreen({ name: 'home' })}
+      controller={controllerForScreen}
+      onExit={() => {
+        setController(null);
+        setScreen({ name: 'home' });
+      }}
     />
   );
 }
