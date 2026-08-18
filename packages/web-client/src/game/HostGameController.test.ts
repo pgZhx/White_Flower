@@ -18,6 +18,8 @@ describe('HostGameController', () => {
     for (const p of controller.room.players) {
       controller.confirmIdentity(p.id);
     }
+    expect(controller.phase).toBe('NIGHT_DOUBLE_KNIFE');
+    controller.confirmIdentity(controller.room.players[0]!.id);
     expect(controller.phase).toBe('ROUND_MAGIC_SELECT');
   });
 
@@ -49,6 +51,11 @@ describe('HostGameController full local game', () => {
     while (controller.phase !== 'GAME_OVER' && safety < 100) {
       safety += 1;
       const phase = controller.phase;
+
+      if (phase === 'NIGHT_DOUBLE_KNIFE') {
+        controller.confirmIdentity(hostId);
+        continue;
+      }
 
       if (phase === 'ROUND_MAGIC_SELECT') {
         const view = controller.getView(hostId)!;

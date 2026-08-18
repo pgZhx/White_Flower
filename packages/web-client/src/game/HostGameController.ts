@@ -153,9 +153,15 @@ export class HostGameController {
     if (!this.engine || !this.gameState) {
       throw new Error('游戏尚未开始');
     }
-    this.identityConfirmed.add(playerId);
-    if (this.identityConfirmed.size >= this.room.players.length) {
-      this.engine.performNightRecognition();
+    if (this.phase === 'NIGHT_RECOGNITION') {
+      this.identityConfirmed.add(playerId);
+      if (this.identityConfirmed.size >= this.room.players.length) {
+        this.engine.performNightRecognition();
+        this.gameState = this.engine.getState();
+      }
+    } else if (this.phase === 'NIGHT_DOUBLE_KNIFE') {
+      // Night recognition information is now visible to every client.
+      // Any player may continue once the table has read the night info.
       this.engine.performDoubleKnifeNight();
       this.gameState = this.engine.getState();
     }
