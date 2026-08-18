@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Card, ClientView } from '@rose-blade/game-engine';
 import type { HostGameController } from '../game/HostGameController';
-import { cardLabel, factionLabel, roleLabel } from '../game/labels';
+import { cardLabel, factionLabel, formatPile, phaseLabel, roleLabel } from '../game/labels';
 
 interface GameScreenProps {
   roomId: string;
@@ -19,7 +19,7 @@ const magicNames: Record<number, string> = {
   4: '左侧随机出牌',
   5: '行动联动',
   6: '调整行动顺序',
-  7: '获得 Ghost',
+  7: '获得幽灵',
   8: '左右邻强制出牌',
   9: '白蔷薇与主教信息',
   10: '换牌',
@@ -152,8 +152,8 @@ export function GameScreen({ roomId, nickname, isHost, controller, onExit }: Gam
         )}
 
         {view.me.magic9Reveal && (
-          <Panel title="Magic 9 私人信息">
-            <p className="text-stone-300">下面两名玩家分别是 White Rose 与 Bishop：</p>
+          <Panel title="魔法 9 私人信息">
+            <p className="text-stone-300">下面两名玩家分别是白蔷薇与主教：</p>
             <div className="mt-2 flex gap-2">
               {[view.me.magic9Reveal.playerAId, view.me.magic9Reveal.playerBId].map((id) => (
                 <span key={id} className="rounded border border-stone-600 bg-stone-800 px-3 py-1">
@@ -166,7 +166,7 @@ export function GameScreen({ roomId, nickname, isHost, controller, onExit }: Gam
         )}
 
         {view.me.magic11Seen && (
-          <Panel title="Magic 11 私人信息">
+          <Panel title="魔法 11 私人信息">
             <p className="text-stone-300">
               你随机看到 {view.players.find((p) => p.id === view.me.magic11Seen?.targetId)?.nickname ?? '目标'} 的一张手牌：
             </p>
@@ -197,7 +197,7 @@ function Header({
   nickname: string;
   isHost: boolean;
   view: ClientView;
-  phase: string;
+  phase: Parameters<typeof phaseLabel>[0];
   players: { id: string; nickname: string }[];
   activeViewerId: string;
   onViewAs: (id: string) => void;
@@ -208,7 +208,7 @@ function Header({
       <div>
         <h1 className="text-2xl font-serif text-rose">血与刃的白蔷薇</h1>
         <p className="text-sm text-stone-400">
-          房间 {roomId} · {nickname} {isHost ? '(房主)' : ''} · 第 {view.roundNumber} 轮 · {phase}
+          房间 {roomId} · {nickname} {isHost ? '(房主)' : ''} · 第 {view.roundNumber} 轮 · {phaseLabel(phase)}
         </p>
       </div>
       <div className="flex items-center gap-2">
@@ -289,7 +289,7 @@ function NightPanel({ view, onContinue }: { view: ClientView; onContinue: () => 
         <p className="mt-2 text-stone-400">你没有获得额外夜间信息。</p>
       )}
       {view.me.role === 'DOUBLE_KNIFE' && (
-        <p className="mt-2 text-rose">你的 Ghost 已替换为第二张 Double Knife。</p>
+        <p className="mt-2 text-rose">你的幽灵已替换为第二张双刀。</p>
       )}
       <button className="mt-4 rounded bg-rose px-4 py-2 font-semibold text-stone-900 hover:bg-stone-100" onClick={onContinue}>
         进入下一阶段
@@ -452,7 +452,7 @@ function ActionPanel({
   return (
     <Panel title="你的行动">
       <p className="text-stone-300">
-        {randomForced ? '你被魔法强制随机出牌。' : canPass ? '请出牌或 Pass。' : '你被强制要求出牌。'}
+        {randomForced ? '你被魔法强制随机出牌。' : canPass ? '请出牌或跳过。' : '你被强制要求出牌。'}
       </p>
       {!randomForced && (
         <div className="mt-3 flex flex-wrap gap-2">
@@ -480,7 +480,7 @@ function ActionPanel({
             className="rounded border border-stone-600 px-4 py-2 text-stone-300 hover:bg-stone-700"
             onClick={() => controller.handleCommand({ type: 'PASS', playerId: activePlayerId })}
           >
-            Pass
+            跳过
           </button>
         )}
       </div>
@@ -508,7 +508,7 @@ function Magic10Panel({
       return action === 'PLAYED' && p.handCount > 0;
     });
     return (
-      <Panel title="Magic 10：换牌">
+      <Panel title="魔法 10：换牌">
         <p className="text-stone-300">你可以不发动，或选择一名已出牌且仍有手牌的玩家。</p>
         <div className="mt-3 flex flex-wrap gap-2">
           <button
@@ -535,7 +535,7 @@ function Magic10Panel({
   if (!isTarget) return <Panel title="换牌">等待被选玩家换牌…</Panel>;
 
   return (
-    <Panel title="Magic 10：换牌">
+    <Panel title="魔法 10：换牌">
       <p className="text-stone-300">请从当前手牌选择一张不同的牌替换本轮已出的牌。</p>
       <div className="mt-3 flex flex-wrap gap-2">
         {view.me.hand.map((card, i) => (
@@ -555,7 +555,7 @@ function Magic10Panel({
 function RevealPanel({ view, onReveal }: { view: ClientView; onReveal: () => void }) {
   const reveal = view.round?.reveal;
   return (
-    <Panel title="Reveal">
+    <Panel title="揭示">
       <p className="text-stone-400">所有玩家已行动，准备公开本轮牌面。</p>
       {reveal && (
         <div className="mt-2 flex flex-wrap gap-2">
@@ -598,9 +598,9 @@ function ResolutionPanel({
           <p>花苞数量：{resolution.budCount}</p>
           <p>白蔷薇安全：{resolution.whiteRoseSafe ? '是' : '否'}</p>
           <div className="mt-2 text-sm text-stone-400">
-            <p>献祭区：{resolution.sacrificePile.join(', ') || '空'}</p>
-            <p>死亡区：{resolution.deathPile.join(', ') || '空'}</p>
-            <p>血刃区：{resolution.bladePile.join(', ') || '空'}</p>
+            <p>献祭区：{formatPile(resolution.sacrificePile)}</p>
+            <p>死亡区：{formatPile(resolution.deathPile)}</p>
+            <p>血刃区：{formatPile(resolution.bladePile)}</p>
           </div>
         </>
       )}
@@ -644,15 +644,15 @@ function Board({ view, myPlayerId }: { view: ClientView; myPlayerId: string }) {
     <div className="mt-6 grid gap-4 md:grid-cols-3">
       <div className="rounded-lg border border-stone-700 bg-stone-900 p-4">
         <h3 className="text-sm text-stone-400">当前状态</h3>
-        <p className="mt-2">阶段：{view.phase}</p>
+        <p className="mt-2">阶段：{phaseLabel(view.phase)}</p>
         <p>当前金币：{view.players.find((p) => p.id === view.currentCoinHolderId)?.nickname ?? '无'}</p>
         <p>白蔷薇安全：{view.whiteRoseSafe ? '是' : '否'}</p>
       </div>
       <div className="rounded-lg border border-stone-700 bg-stone-900 p-4">
         <h3 className="text-sm text-stone-400">牌堆</h3>
-        <p>献祭区：{view.sacrificePile.join(', ') || '空'}</p>
-        <p>死亡区：{view.deathPile.join(', ') || '空'}</p>
-        <p>血刃区：{view.bladePile.join(', ') || '空'}</p>
+        <p>献祭区：{formatPile(view.sacrificePile)}</p>
+        <p>死亡区：{formatPile(view.deathPile)}</p>
+        <p>血刃区：{formatPile(view.bladePile)}</p>
       </div>
       <div className="rounded-lg border border-stone-700 bg-stone-900 p-4">
         <h3 className="text-sm text-stone-400">我的区域</h3>

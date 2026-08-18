@@ -36,7 +36,7 @@ export default function App() {
     // MVP local simulation: join also creates a local controller.
     // Real WebRTC join will replace this in Stage E.
     const c = new HostGameController({ roomId, hostPlayerId: 'host_sim' });
-    c.addPlayer('Host');
+    c.addPlayer('房主');
     c.addPlayer(nickname);
     setController(c);
     setScreen({ name: 'lobby', roomId, nickname, playerId, isHost: false });

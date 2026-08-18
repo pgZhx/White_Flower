@@ -34,9 +34,9 @@ export function LobbyScreen({
 
   const addSimulatedPlayer = () => {
     if (!controller || !canAdd) return;
-    const names = ['Alice', 'Bob', 'Carol', 'Dave', 'Eve', 'Frank', 'Grace', 'Heidi', 'Ivan'];
+    const names = ['艾丽丝', '鲍勃', '卡罗尔', '戴夫', '伊芙', '弗兰克', '格蕾丝', '海蒂', '伊万'];
     const used = new Set(players.map((p) => p.nickname));
-    const name = names.find((n) => !used.has(n)) ?? `Player${players.length + 1}`;
+    const name = names.find((n) => !used.has(n)) ?? `玩家${players.length + 1}`;
     controller.addPlayer(name);
   };
 

@@ -37,7 +37,7 @@ export function HomeScreen({ initialRoom, onCreate, onJoin }: HomeScreenProps) {
     <div className="min-h-screen flex items-center justify-center bg-cathedral px-4">
       <div className="w-full max-w-md rounded-lg border border-stone-700 bg-stone-900 p-8 shadow-2xl">
         <h1 className="text-center text-3xl font-serif text-rose">血与刃的白蔷薇</h1>
-        <p className="mt-2 text-center text-sm text-stone-400">朋友打开网页即可开始的在线桌游 MVP</p>
+        <p className="mt-2 text-center text-sm text-stone-400">朋友打开网页即可开始的在线桌游原型</p>
         <div className="mt-6 space-y-4">
           <input
             className="w-full rounded border border-stone-700 bg-stone-950 px-3 py-2 text-stone-100 outline-none focus:border-rose"
