@@ -1,7 +1,7 @@
 import { isBloodBlade, isBud, isWhiteRose, removeOneCard } from '../config/cards.js';
 import type { Card, GameState, MagicId, PlayerAction, RandomProvider, RevealResult, RoundState } from '../types.js';
 import { InvalidActionError, InvalidPhaseError, InvalidTargetError, NotYourTurnError } from '../errors.js';
-import { appendEvent, createEvent } from '../events.js';
+import { appendEvent, appendStateEvent, createEvent } from '../events.js';
 import { getLeftNeighborId, getPlayer, getRightNeighborId, resolveMagicNow, applyMagic10, hasLegalTargets, magicRequiresTargetInput } from './magic.js';
 import { createInitialRound } from './night.js';
 import { allPlayersUsedCrystal, evaluateFinalCrystal, evaluateRoundResolution } from './victory.js';
@@ -51,8 +51,8 @@ export const selectCoinTarget = (state: GameState, targetId: string): GameState 
     version: state.version + 1,
   };
 
-  next = appendEvent(next, createEvent('COIN_TRANSFERRED', { fromId: state.currentCoinHolderId, toId: targetId }));
-  next = appendEvent(next, createEvent('CRYSTAL_REVEALED', { playerId: targetId, number: crystalNumber, roundNumber: state.roundNumber }));
+  next = appendStateEvent(next, createEvent('COIN_TRANSFERRED', { fromId: state.currentCoinHolderId, toId: targetId }));
+  next = appendStateEvent(next, createEvent('CRYSTAL_REVEALED', { playerId: targetId, number: crystalNumber, roundNumber: state.roundNumber }));
   return next;
 };
 
@@ -224,7 +224,7 @@ export const submitAction = (
       round: nextRound,
       version: state.version + 1,
     };
-    next = appendEvent(next, createEvent('CARD_PLAYED', { playerId, card: playedCard }));
+    next = appendStateEvent(next, createEvent('CARD_PLAYED', { playerId, card: playedCard }));
     return afterActionSubmitted(next);
   }
 
@@ -239,7 +239,7 @@ export const submitAction = (
     round: nextRound,
     version: state.version + 1,
   };
-  next = appendEvent(next, createEvent('PLAYER_PASSED', { playerId }));
+  next = appendStateEvent(next, createEvent('PLAYER_PASSED', { playerId }));
   return afterActionSubmitted(next);
 };
 

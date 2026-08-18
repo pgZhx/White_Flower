@@ -1,7 +1,7 @@
 import type { Card, GameState, MagicId, PlayerState, RandomProvider } from '../types.js';
 import { removeOneCard } from '../config/cards.js';
 import { InvalidActionError, InvalidTargetError } from '../errors.js';
-import { appendEvent, createEvent } from '../events.js';
+import { appendStateEvent, createEvent } from '../events.js';
 
 export const getPlayer = (state: GameState, playerId: string): PlayerState => {
   const player = state.players.find((p) => p.id === playerId);
@@ -103,27 +103,27 @@ export const resolveMagicNow = (
         ...round,
         forcedPlay: [...round.forcedPlay, targetId],
       }));
-      next = appendEvent(next, createEvent('MAGIC_RESOLVED', { magicId, casterId, targetId }));
+      next = appendStateEvent(next, createEvent('MAGIC_RESOLVED', { magicId, casterId, targetId }));
       return next;
     }
 
     case 2: {
       let next = updateRound(state, (round) => ({ ...round, noShuffle: true }));
-      next = appendEvent(next, createEvent('MAGIC_RESOLVED', { magicId, casterId }));
+      next = appendStateEvent(next, createEvent('MAGIC_RESOLVED', { magicId, casterId }));
       return next;
     }
 
     case 3: {
       const neighborId = getRightNeighborId(state, casterId);
       let next = updateRound(state, (round) => ({ ...round, randomForcedRight: neighborId }));
-      next = appendEvent(next, createEvent('MAGIC_RESOLVED', { magicId, casterId, neighborId }));
+      next = appendStateEvent(next, createEvent('MAGIC_RESOLVED', { magicId, casterId, neighborId }));
       return next;
     }
 
     case 4: {
       const neighborId = getLeftNeighborId(state, casterId);
       let next = updateRound(state, (round) => ({ ...round, randomForcedLeft: neighborId }));
-      next = appendEvent(next, createEvent('MAGIC_RESOLVED', { magicId, casterId, neighborId }));
+      next = appendStateEvent(next, createEvent('MAGIC_RESOLVED', { magicId, casterId, neighborId }));
       return next;
     }
 
@@ -133,7 +133,7 @@ export const resolveMagicNow = (
         ...round,
         magic5Targets: [...targetIds],
       }));
-      next = appendEvent(next, createEvent('MAGIC_RESOLVED', { magicId, casterId, targetIds }));
+      next = appendStateEvent(next, createEvent('MAGIC_RESOLVED', { magicId, casterId, targetIds }));
       return next;
     }
 
@@ -145,7 +145,7 @@ export const resolveMagicNow = (
         ...round,
         magic6MoveToEnd: magic6Choice === 'LAST',
       }));
-      next = appendEvent(next, createEvent('MAGIC_RESOLVED', { magicId, casterId, choice: magic6Choice }));
+      next = appendStateEvent(next, createEvent('MAGIC_RESOLVED', { magicId, casterId, choice: magic6Choice }));
       return next;
     }
 
@@ -153,10 +153,10 @@ export const resolveMagicNow = (
       requireOtherWithHand(state, casterId, targetIds);
       const targetId = targetIds[0] as string;
       let next = updatePlayer(state, targetId, (player) => {
-        const hand = [...player.hand, 'GHOST'];
+        const hand: Card[] = [...player.hand, 'GHOST'];
         return { ...player, hand, handCount: hand.length };
       });
-      next = appendEvent(next, createEvent('MAGIC_RESOLVED', { magicId, casterId, targetId }));
+      next = appendStateEvent(next, createEvent('MAGIC_RESOLVED', { magicId, casterId, targetId }));
       return next;
     }
 
@@ -167,7 +167,7 @@ export const resolveMagicNow = (
         ...round,
         magic8Neighbors: { centerId: casterId, leftId, rightId },
       }));
-      next = appendEvent(next, createEvent('MAGIC_RESOLVED', { magicId, casterId, leftId, rightId }));
+      next = appendStateEvent(next, createEvent('MAGIC_RESOLVED', { magicId, casterId, leftId, rightId }));
       return next;
     }
 
@@ -182,7 +182,7 @@ export const resolveMagicNow = (
         ...player,
         magic9Reveal: { playerAId: whiteRose.id, playerBId: bishop.id },
       }));
-      next = appendEvent(next, createEvent('MAGIC_RESOLVED', { magicId, casterId }));
+      next = appendStateEvent(next, createEvent('MAGIC_RESOLVED', { magicId, casterId }));
       return next;
     }
 
@@ -197,7 +197,7 @@ export const resolveMagicNow = (
           resolved: false,
         },
       }));
-      next = appendEvent(next, createEvent('MAGIC_STARTED', { magicId, casterId }));
+      next = appendStateEvent(next, createEvent('MAGIC_STARTED', { magicId, casterId }));
       return next;
     }
 
@@ -210,7 +210,7 @@ export const resolveMagicNow = (
         ...player,
         magic11Seen: { targetId, card },
       }));
-      next = appendEvent(next, createEvent('MAGIC_RESOLVED', { magicId, casterId, targetId, card }));
+      next = appendStateEvent(next, createEvent('MAGIC_RESOLVED', { magicId, casterId, targetId, card }));
       return next;
     }
 
@@ -238,7 +238,7 @@ export const applyMagic10 = (
       },
       magic10Resolved: true,
     }));
-    next = appendEvent(next, createEvent('MAGIC_RESOLVED', { magicId: 10, casterId, skipped: true }));
+    next = appendStateEvent(next, createEvent('MAGIC_RESOLVED', { magicId: 10, casterId, skipped: true }));
     return next;
   }
 
@@ -279,7 +279,7 @@ export const applyMagic10 = (
         }
       : null,
   };
-  next = appendEvent(next, createEvent('MAGIC_RESOLVED', { magicId: 10, casterId, targetId, originalCard, replacementCard }));
+  next = appendStateEvent(next, createEvent('MAGIC_RESOLVED', { magicId: 10, casterId, targetId, originalCard, replacementCard }));
   return next;
 };
 

@@ -1,17 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import type { GameState, MagicId, Role } from '../src/index.js';
 import {
-  advanceThroughNight,
-  createStateWithRoles,
   resolveCurrentMagic,
   startPlayerActions,
   submitAction,
   submitMagic10Target,
   submitMagic10Replacement,
-  setHand,
-  playerById,
   SeededRandom,
 } from '../src/index.js';
+import { advanceThroughNight, createStateWithRoles, setHand, playerById } from './helpers.js';
 
 const random = new SeededRandom(42);
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { buildPlayerView, createStateWithRoles, performNightRecognition, resolveMagicNow, SeededRandom } from '../src/index.js';
+import { buildPlayerView, performNightRecognition, resolveMagicNow, SeededRandom } from '../src/index.js';
+import { createStateWithRoles } from './helpers.js';
 
 const random = new SeededRandom(7);
 

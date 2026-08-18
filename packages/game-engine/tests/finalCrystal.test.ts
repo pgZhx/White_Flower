@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import type { GameState, Role } from '../src/index.js';
-import { advanceThroughNight, checkVictoryAndAdvance, createStateWithRoles, setHand } from '../src/index.js';
+import type { Card, GameState, Role } from '../src/index.js';
+import { checkVictoryAndAdvance } from '../src/index.js';
+import { advanceThroughNight, createStateWithRoles, setHand } from './helpers.js';
 
-const makeFinalState = (roles: Role[], whiteHands: string[][]): GameState => {
+const makeFinalState = (roles: Role[], whiteHands: Card[][]): GameState => {
   let state = createStateWithRoles(roles);
   state = advanceThroughNight(state);
   const players = state.players.map((player) => {

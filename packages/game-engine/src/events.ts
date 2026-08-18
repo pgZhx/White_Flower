@@ -1,4 +1,4 @@
-import type { GameEvent, GameEventType } from './types.js';
+import type { GameEvent, GameEventType, GameState } from './types.js';
 
 let eventSequence = 0;
 
@@ -19,6 +19,11 @@ export const createEvent = (
 export const appendEvent = (events: GameEvent[], event: GameEvent): GameEvent[] => {
   return [...events, event];
 };
+
+export const appendStateEvent = (state: GameState, event: GameEvent): GameState => ({
+  ...state,
+  eventLog: appendEvent(state.eventLog, event),
+});
 
 export const resetEventSequence = (): void => {
   eventSequence = 0;

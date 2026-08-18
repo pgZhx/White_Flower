@@ -1,11 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Card, GameState, Role } from '../src/index.js';
-import {
-  createStateWithRoles,
-  advanceThroughNight,
-  resolveRound,
-  checkVictoryAndAdvance,
-} from '../src/index.js';
+import { resolveRound, checkVictoryAndAdvance } from '../src/index.js';
+import { advanceThroughNight, createStateWithRoles } from './helpers.js';
 
 const stateWithReveal = (roles: Role[], revealCards: Card[]): GameState => {
   let state = createStateWithRoles(roles);

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { buildInitialHand, createStateWithRoles, advanceThroughNight, playerById } from '../src/index.js';
+import { buildInitialHand } from '../src/index.js';
+import { advanceThroughNight, createStateWithRoles, playerById } from './helpers.js';
 
 describe('Initial Hand', () => {
   it('WHITE_ROSE starts with WHITE_ROSE + BELIEVER + GHOST', () => {

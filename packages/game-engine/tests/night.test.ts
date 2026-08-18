@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { createStateWithRoles, performNightRecognition, playerById } from '../src/index.js';
+import { performNightRecognition } from '../src/index.js';
+import { createStateWithRoles, playerById } from './helpers.js';
 
 describe('Night Knowledge', () => {
   it('WHITE_ROSE, BISHOP, DOUBLE_KNIFE, GREAT_SWORD see the eyes-open player set', () => {
