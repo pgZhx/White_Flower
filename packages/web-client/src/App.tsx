@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   LocalTransport,
   WebRtcTransport,
+  WebSocketRelayTransport,
   generateRoomCode,
+  getRelayUrl,
   makePeerId,
   makePlayerId,
 } from '@rose-blade/p2p-network';
@@ -33,6 +35,15 @@ function isDebugMode(): boolean {
   return new URLSearchParams(window.location.search).get('debug') === '1';
 }
 
+function getTransportMode(): 'relay' | 'webrtc' {
+  const mode = new URLSearchParams(window.location.search).get('transport');
+  return mode === 'webrtc' ? 'webrtc' : 'relay';
+}
+
+function errorCode(error: unknown): string | undefined {
+  return (error as { code?: string } | null)?.code;
+}
+
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error('连接超时，请确认房主在线后重试。')), ms);
@@ -52,6 +63,10 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 function isUnavailableId(error: unknown): boolean {
   const e = error as { type?: string; message?: string } | null;
   return e?.type === 'unavailable-id' || /ID is taken|ID unavailable|already taken/i.test(e?.message ?? '');
+}
+
+function isRoomExists(error: unknown): boolean {
+  return errorCode(error) === 'ROOM_EXISTS';
 }
 
 
@@ -83,16 +98,48 @@ function getPeerJSOptions(): {
 }
 
 function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : '发生未知错误，请重试。';
+  if (error instanceof Error) {
+    const code = errorCode(error);
+    switch (code) {
+      case 'ROOM_NOT_FOUND':
+        return '找不到该房间，请确认房间码正确且房主仍然在线。';
+      case 'ROOM_EXISTS':
+        return '房间码已被占用，请重试。';
+      case 'HOST_OFFLINE':
+        return '房主已离线，无法加入。';
+      case 'ROOM_FULL':
+        return '房间人数已满。';
+      case 'SERVER_UNAVAILABLE':
+        return 'Relay 服务暂不可用，请稍后重试。';
+      case 'CONNECTION_TIMEOUT':
+        return '连接超时，请确认网络或 Relay 服务可用。';
+      case 'PROTOCOL_ERROR':
+        return '网络协议错误，请刷新页面重试。';
+      default:
+        return error.message;
+    }
+  }
+  return '发生未知错误，请重试。';
 }
 
 async function createHostClient(nickname: string): Promise<HostGameClient> {
   let lastError: unknown = new Error('创建房间失败，请重试。');
+  const transportMode = getTransportMode();
   for (let attempt = 0; attempt < 5; attempt += 1) {
     const roomId = generateRoomCode();
     const controller = new HostGameController({ roomId, hostPlayerId: makePlayerId(), seed: randomSeed() });
     controller.addPlayer(nickname);
-    const transport = new WebRtcTransport({ role: 'host', peerId: roomId, ...getPeerJSOptions() });
+
+    const transport =
+      transportMode === 'webrtc'
+        ? new WebRtcTransport({ role: 'host', peerId: roomId, ...getPeerJSOptions() })
+        : new WebSocketRelayTransport({
+            role: 'host',
+            roomId,
+            clientId: makePeerId('host'),
+            url: getRelayUrl(),
+          });
+
     const networkHost = new NetworkHost(controller, transport);
     try {
       await transport.connect();
@@ -101,7 +148,11 @@ async function createHostClient(nickname: string): Promise<HostGameClient> {
       lastError = error;
       networkHost.destroy();
       transport.disconnect();
-      if (isUnavailableId(error)) continue;
+      if (transportMode === 'webrtc') {
+        if (isUnavailableId(error)) continue;
+      } else if (isRoomExists(error)) {
+        continue;
+      }
       break;
     }
   }
@@ -109,12 +160,23 @@ async function createHostClient(nickname: string): Promise<HostGameClient> {
 }
 
 async function createPeerClient(nickname: string, roomId: string): Promise<PeerGameClient> {
+  const normalizedRoomId = roomId.trim().toUpperCase();
+  const transportMode = getTransportMode();
   const peerId = makePeerId('guest');
-  const transport = new WebRtcTransport({ role: 'peer', peerId, hostPeerId: roomId, ...getPeerJSOptions() });
+  const transport =
+    transportMode === 'webrtc'
+      ? new WebRtcTransport({ role: 'peer', peerId, hostPeerId: normalizedRoomId, ...getPeerJSOptions() })
+      : new WebSocketRelayTransport({
+          role: 'peer',
+          roomId: normalizedRoomId,
+          clientId: peerId,
+          url: getRelayUrl(),
+        });
+
   try {
     await withTimeout(transport.connect(), 12000);
     const networkPeer = new NetworkPeer(transport, peerId);
-    const peerClient = new PeerGameClient(networkPeer, roomId);
+    const peerClient = new PeerGameClient(networkPeer, normalizedRoomId);
     await peerClient.connect(nickname);
     return peerClient;
   } catch (error) {
