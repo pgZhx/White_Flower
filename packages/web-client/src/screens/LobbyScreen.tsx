@@ -21,6 +21,7 @@ export function LobbyScreen({
   onLeave,
 }: LobbyScreenProps) {
   const [, setTick] = useState(0);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (!controller) return;
@@ -57,6 +58,23 @@ export function LobbyScreen({
               房间号：<span className="font-mono text-stone-100">{roomId}</span>
             </p>
             <p className="text-xs text-stone-500">当前为本地模拟模式，用于单浏览器调试多人流程。</p>
+            <div className="mt-2 flex items-center gap-2 text-xs">
+              <code className="rounded bg-stone-950 px-2 py-1 text-stone-300">
+                {typeof window !== 'undefined' ? `${window.location.origin}/?room=${roomId}` : `/?room=${roomId}`}
+              </code>
+              <button
+                className="rounded border border-stone-600 px-2 py-1 text-stone-300 hover:bg-stone-700"
+                onClick={() => {
+                  const url = `${window.location.origin}/?room=${roomId}`;
+                  navigator.clipboard?.writeText(url).then(() => {
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 1500);
+                  });
+                }}
+              >
+                {copied ? '已复制' : '复制邀请链接'}
+              </button>
+            </div>
           </div>
           <button onClick={onLeave} className="text-sm text-stone-400 hover:text-stone-100">
             离开

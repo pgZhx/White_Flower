@@ -43,3 +43,60 @@ npm run typecheck
 - `docs/PROJECT_POLICY.md`：项目操作规范
 - `docs/FRONTEND_MIGRATION_ANALYSIS.md`：纯前端多人桌游迁移分析
 - `packages/game-engine`：独立游戏引擎
+
+
+## Development
+
+### Frontend Development
+
+```bash
+npm install
+npm run dev:web
+```
+
+打开 http://localhost:5173 。
+
+### Run Tests
+
+```bash
+npm test
+npm run typecheck
+```
+
+### Build Static Site
+
+```bash
+npm run build:web
+```
+
+产物位于：
+
+```text
+packages/web-client/dist/
+```
+
+该目录可直接交给任意静态 HTTP Server / Vercel / Cloudflare Pages / GitHub Pages / Nginx 托管。
+
+### Local Multiplayer Simulation
+
+当前 Web MVP 内置本地模拟模式：
+
+1. 打开首页，输入昵称并创建房间。
+2. 在 Lobby 中点击“添加模拟玩家”凑满 5–10 人。
+3. 将所有玩家设为“准备”，房主点击“开始游戏”。
+4. 房主可以在游戏页顶部下拉切换“当前查看玩家”，方便调试隐藏信息。
+
+### P2P Architecture
+
+- 房主浏览器作为 authoritative host 持有完整 GameState。
+- 普通玩家只发送命令，并接收自己的 PlayerView。
+- 通信层通过 `packages/p2p-network` 抽象，支持 LocalTransport 与 WebRTC Transport。
+- WebRTC 使用 PeerJS 公共信令/STUN 基础设施，不要求我们维护游戏后端。
+- 详见 `docs/P2P_NETWORKING.md`。
+
+### Known MVP Limitations
+
+- 房主浏览器必须保持在线；房主离开则当前房间结束。
+- 不提供 Host Migration、账号系统、数据库、专用游戏服务器。
+- 当前真实 WebRTC 联机 Transport 已实现，但 UI 主流程仍以本地模拟模式为主；真实双端页面接入可作为下一阶段直接基于现有 NetworkHost/NetworkPeer 完成。
+- 当前不处理复杂断线重连与 TURN 配置。
