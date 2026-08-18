@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { HostGameController } from '../game/HostGameController';
 
 interface LobbyScreenProps {
@@ -28,7 +28,7 @@ export function LobbyScreen({
     return controller.subscribe(() => setTick((t) => t + 1));
   }, [controller]);
 
-  const players = useMemo(() => controller?.room.players ?? [], [controller, nickname, playerId, roomId]);
+  const players = controller?.room.players ?? [];
   const canAdd = (controller?.room.players.length ?? 0) < 10;
   const allReady = (controller?.canStart() ?? false) && players.length >= 5;
 
