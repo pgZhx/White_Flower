@@ -1,0 +1,16 @@
+[Unit]
+Description=White_Flower WebSocket Relay
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/apps/White_Flower
+ExecStart=/usr/bin/node /home/ubuntu/apps/White_Flower/server/relay-server.mjs
+Environment=PORT=9001
+Environment=HOST=127.0.0.1
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
