@@ -66,3 +66,25 @@ P2P Communication Layer（WebRTC DataChannel，或 MVP 先单浏览器模拟）
 
 - 旧文档中的“实验室服务器限制”“公共账号”“不能全局安装”等内容仅代表过去环境，已不再适用。
 - 项目 git 历史保留完整开发记录，不删除旧说明。
+## 公网静态部署（Nginx）
+
+当前仓库已经可以直接部署为公网静态站点。
+
+```bash
+npm run build:web
+# 或一键部署到本机 Nginx
+./scripts/deploy-static.sh
+```
+
+部署后：
+
+- 静态文件位于 `/var/www/white-flower`
+- Nginx 站点配置：`deploy/nginx-white-flower.conf`
+- 邀请链接会自动使用当前域名/IP，例如：
+  - `http://服务器IP/?room=AB7K2P`
+  - `https://你的域名/?room=AB7K2P`
+
+> 公网可访问的前提：
+> 1. 服务器安全组/防火墙允许 80/443 端口。
+> 2. 如果使用域名，请将域名 A 记录解析到服务器 IP。
+> 3. 生产环境强烈建议配置 HTTPS；WebRTC 在 HTTPS 下最可靠。
