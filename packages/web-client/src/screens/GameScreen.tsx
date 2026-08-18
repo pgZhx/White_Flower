@@ -678,11 +678,46 @@ function Magic10Panel({
   );
 }
 
+function RevealPlayerInfo({ view }: { view: ClientView }) {
+  const playerMap = view.round?.reveal?.playerMap;
+  if (playerMap) {
+    return (
+      <div className="mt-2 text-sm text-stone-300">
+        <p>本轮出牌对应：</p>
+        <div className="mt-1 flex flex-wrap gap-2">
+          {Object.entries(playerMap).map(([playerId, card]) => {
+            const nickname = view.players.find((p) => p.id === playerId)?.nickname ?? playerId;
+            return (
+              <span key={playerId} className="rounded border border-stone-600 bg-stone-800 px-2 py-1 text-xs">
+                {nickname}：<CardBadge card={card} />
+              </span>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  const playedPlayers = view.round
+    ? Object.entries(view.round.actions)
+        .filter(([, action]) => action === 'PLAYED')
+        .map(([playerId]) => view.players.find((p) => p.id === playerId)?.nickname ?? playerId)
+    : [];
+
+  return (
+    <div className="mt-2 text-sm text-stone-300">
+      <p>本轮出牌玩家：{playedPlayers.length > 0 ? playedPlayers.join('、') : '无'}</p>
+      {playedPlayers.length > 0 && <p className="text-xs text-stone-500">牌面已洗混，不公开具体对应关系。</p>}
+    </div>
+  );
+}
+
 function RevealPanel({ view, onReveal }: { view: ClientView; onReveal: () => void }) {
   const reveal = view.round?.reveal;
   return (
     <Panel title="揭示">
       <p className="text-stone-400">所有玩家已行动，准备公开本轮牌面。</p>
+      <RevealPlayerInfo view={view} />
       {reveal && (
         <div className="mt-2 flex flex-wrap gap-2">
           {reveal.cards.map((card, i) => (
@@ -714,11 +749,14 @@ function ResolutionPanel({
   return (
     <Panel title={mode === 'reveal' ? '本轮公开牌' : '本轮结果'}>
       {mode === 'reveal' && reveal && (
-        <div className="mt-2 flex flex-wrap gap-2">
-          {reveal.cards.map((card, i) => (
-            <CardBadge key={`${card}-${i}`} card={card} />
-          ))}
-        </div>
+        <>
+          <RevealPlayerInfo view={view} />
+          <div className="mt-2 flex flex-wrap gap-2">
+            {reveal.cards.map((card, i) => (
+              <CardBadge key={`${card}-${i}`} card={card} />
+            ))}
+          </div>
+        </>
       )}
       {mode === 'resolution' && resolution && (
         <>
