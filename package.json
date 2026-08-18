@@ -13,9 +13,12 @@
     "test:web": "npm run test --workspace @rose-blade/web-client",
     "dev:web": "npm run dev --workspace @rose-blade/web-client",
     "build:web": "npm run build --workspace @rose-blade/web-client",
-    "peer": "node server/peer-server.mjs"
+    "peer": "node server/peer-server.mjs",
+    "dev:relay": "node server/relay-server.mjs",
+    "start:relay": "node server/relay-server.mjs"
   },
   "dependencies": {
-    "peerjs-server": "^0.2.9"
+    "peerjs-server": "^0.2.9",
+    "ws": "^8.21.3"
   }
 }
