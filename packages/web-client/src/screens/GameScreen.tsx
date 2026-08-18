@@ -20,13 +20,76 @@ const magicNames: Record<number, string> = {
   4: '左侧随机出牌',
   5: '行动联动',
   6: '调整行动顺序',
-  7: '获得幽灵',
+  7: '获得幽魂',
   8: '左右邻强制出牌',
   9: '白蔷薇与司教信息',
   10: '换牌',
   11: '偷看一张手牌',
   12: '强制出牌',
 };
+
+const magicBook: Array<{ id: number; name: string; description: string }> = [
+  {
+    id: 1,
+    name: magicNames[1]!,
+    description: '指定一名仍有手牌的玩家，本轮必须出牌。',
+  },
+  {
+    id: 2,
+    name: magicNames[2]!,
+    description: '本轮公开牌面时不洗牌，直接公开谁出了什么牌。',
+  },
+  {
+    id: 3,
+    name: magicNames[3]!,
+    description: '你右手边玩家随机出一张手牌。',
+  },
+  {
+    id: 4,
+    name: magicNames[4]!,
+    description: '你左手边玩家随机出一张手牌。',
+  },
+  {
+    id: 5,
+    name: magicNames[5]!,
+    description: '指定两名玩家：前者出牌则后者必须出牌，前者跳过则后者也必须跳过。',
+  },
+  {
+    id: 6,
+    name: magicNames[6]!,
+    description: '你选择正常顺序首位行动，或改为最后行动。',
+  },
+  {
+    id: 7,
+    name: magicNames[7]!,
+    description: '指定一名玩家获得一张幽魂。',
+  },
+  {
+    id: 8,
+    name: magicNames[8]!,
+    description: '你左右两侧玩家本轮必须出牌。',
+  },
+  {
+    id: 9,
+    name: magicNames[9]!,
+    description: '暗刃得知白蔷薇和司教是下面两人，但不知道具体对应。',
+  },
+  {
+    id: 10,
+    name: magicNames[10]!,
+    description: '你可以不发动，或指定一名已出牌且有手牌的玩家换一张手牌作为本轮出牌。',
+  },
+  {
+    id: 11,
+    name: magicNames[11]!,
+    description: '指定一名玩家，你看他一张手牌后再放回。',
+  },
+  {
+    id: 12,
+    name: magicNames[12]!,
+    description: '同魔法 1：指定一名还有手牌的玩家，本轮必须出牌。',
+  },
+];
 
 export function GameScreen({ roomId, nickname, isHost, client, debug, onExit }: GameScreenProps) {
   const [, setTick] = useState(0);
@@ -82,7 +145,7 @@ export function GameScreen({ roomId, nickname, isHost, client, debug, onExit }: 
           onExit={onExit}
         />
 
-        {phase === 'NIGHT_RECOGNITION' && !client.allIdentitiesConfirmed && (
+        {phase === 'NIGHT_RECOGNITION' && (
           <IdentityPanel view={view} onConfirm={confirmIdentity} onConfirmAll={debug && isHost ? confirmAll : undefined} />
         )}
 
@@ -179,6 +242,8 @@ export function GameScreen({ roomId, nickname, isHost, client, debug, onExit }: 
         )}
 
         <Board view={view} myPlayerId={activeViewerId} />
+
+        <ReferencePanels view={view} />
       </div>
     </div>
   );
@@ -237,6 +302,66 @@ function Header({
   );
 }
 
+function ReferencePanels({ view }: { view: ClientView }) {
+  const hasNightInfo = (view.me.nightRecognition?.length ?? 0) > 0;
+  return (
+    <div className="mt-6 grid gap-4 lg:grid-cols-3">
+      {hasNightInfo && (
+        <div className="rounded-lg border border-stone-700 bg-stone-900 p-4">
+          <h3 className="text-sm font-semibold text-rose">夜间相认信息</h3>
+          <p className="mt-2 text-xs text-stone-400">你睁眼时看到的玩家：</p>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {view.me.nightRecognition?.map((id) => {
+              const p = view.players.find((x) => x.id === id);
+              return (
+                <span key={id} className="rounded border border-stone-600 bg-stone-800 px-2 py-1 text-xs">
+                  {p?.nickname ?? id}
+                </span>
+              );
+            })}
+          </div>
+          <p className="mt-2 text-[11px] text-stone-500">仅你知道这些玩家参与了夜间相认，不知道具体身份。</p>
+        </div>
+      )}
+      <div className={`rounded-lg border border-stone-700 bg-stone-900 p-4 ${hasNightInfo ? 'lg:col-span-2' : 'lg:col-span-3'}`}>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-sm font-semibold text-rose">魔法之书</h3>
+          <span className="text-xs text-stone-400">
+            你的水晶：{view.me.crystal !== null ? <span className="text-rose">{view.me.crystal}</span> : '已使用'}
+          </span>
+        </div>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          {magicBook.map((magic) => {
+            const isMine = view.me.crystal === magic.id;
+            return (
+              <div
+                key={magic.id}
+                className={`rounded border p-2 ${isMine ? 'border-rose bg-rose/10' : 'border-stone-800 bg-stone-950'}`}
+              >
+                <p className="text-sm font-semibold text-stone-200">
+                  {magic.id}. {magic.name}
+                  {isMine && <span className="ml-1 text-xs text-rose">（你的水晶）</span>}
+                </p>
+                <p className="mt-1 text-xs leading-relaxed text-stone-400">{magic.description}</p>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ConfirmationHint({ confirmation }: { confirmation: ClientView['phaseConfirmation'] }) {
+  if (!confirmation) return null;
+  return (
+    <p className="mt-3 text-sm text-stone-500">
+      {confirmation.confirmedByMe ? '你已确认，等待其他玩家确认…' : '请点击按钮确认。'}
+      <span className="ml-1">（{confirmation.confirmed}/{confirmation.required} 人已确认）</span>
+    </p>
+  );
+}
+
 function IdentityPanel({
   view,
   onConfirm,
@@ -260,16 +385,19 @@ function IdentityPanel({
         </div>
         <p className="mt-2 text-sm text-stone-400">水晶：{view.me.crystal}</p>
       </div>
-      <div className="mt-5 flex gap-2">
-        <button className="rounded bg-rose px-4 py-2 font-semibold text-stone-900 hover:bg-stone-100" onClick={onConfirm}>
-          我知道了
-        </button>
-        {onConfirmAll && (
-          <button className="rounded bg-stone-700 px-4 py-2 text-white hover:bg-stone-600" onClick={onConfirmAll}>
-            全部玩家确认（调试）
+      <ConfirmationHint confirmation={view.phaseConfirmation} />
+      {!view.phaseConfirmation?.confirmedByMe && (
+        <div className="mt-5 flex gap-2">
+          <button className="rounded bg-rose px-4 py-2 font-semibold text-stone-900 hover:bg-stone-100" onClick={onConfirm}>
+            我知道了
           </button>
-        )}
-      </div>
+          {onConfirmAll && (
+            <button className="rounded bg-stone-700 px-4 py-2 text-white hover:bg-stone-600" onClick={onConfirmAll}>
+              全部玩家确认（调试）
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -279,25 +407,19 @@ function NightPanel({ view, onContinue }: { view: ClientView; onContinue: () => 
     <div className="mt-6 rounded-lg border border-stone-700 bg-stone-900 p-6">
       <h2 className="text-xl font-serif text-rose">夜间信息</h2>
       {view.me.nightRecognition ? (
-        <>
-          <p className="mt-2 text-stone-300">与你一同在夜间睁眼的玩家：</p>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {view.me.nightRecognition.map((id) => {
-              const p = view.players.find((x) => x.id === id);
-              return <span key={id} className="rounded border border-stone-600 bg-stone-800 px-3 py-1">{p?.nickname ?? id}</span>;
-            })}
-          </div>
-          <p className="mt-2 text-xs text-stone-500">你只知道这些玩家参与了夜间相认，不知道具体身份。</p>
-        </>
+        <p className="mt-2 text-sm text-stone-400">界面最下方“夜间相认信息”会一直保留，方便你随时查看。</p>
       ) : (
         <p className="mt-2 text-stone-400">你没有获得额外夜间信息。</p>
       )}
       {view.me.role === 'DOUBLE_KNIFE' && (
-        <p className="mt-2 text-rose">你的幽灵已替换为第二张双刃。</p>
+        <p className="mt-2 text-rose">你的幽魂已替换为第二张双刃。</p>
       )}
-      <button className="mt-4 rounded bg-rose px-4 py-2 font-semibold text-stone-900 hover:bg-stone-100" onClick={onContinue}>
-        进入下一阶段
-      </button>
+      <ConfirmationHint confirmation={view.phaseConfirmation} />
+      {!view.phaseConfirmation?.confirmedByMe && (
+        <button className="mt-4 rounded bg-rose px-4 py-2 font-semibold text-stone-900 hover:bg-stone-100" onClick={onContinue}>
+          进入下一阶段
+        </button>
+      )}
     </div>
   );
 }
@@ -568,9 +690,12 @@ function RevealPanel({ view, onReveal }: { view: ClientView; onReveal: () => voi
           ))}
         </div>
       )}
-      <button className="mt-4 rounded bg-blood px-4 py-2 text-white hover:bg-red-800" onClick={onReveal}>
-        揭示
-      </button>
+      <ConfirmationHint confirmation={view.phaseConfirmation} />
+      {!view.phaseConfirmation?.confirmedByMe && (
+        <button className="mt-4 rounded bg-blood px-4 py-2 text-white hover:bg-red-800" onClick={onReveal}>
+          揭示
+        </button>
+      )}
     </Panel>
   );
 }
@@ -608,9 +733,12 @@ function ResolutionPanel({
           </div>
         </>
       )}
-      <button className="mt-4 rounded bg-blood px-4 py-2 text-white hover:bg-red-800" onClick={onContinue}>
-        {mode === 'reveal' ? '结算本轮' : '继续'}
-      </button>
+      <ConfirmationHint confirmation={view.phaseConfirmation} />
+      {!view.phaseConfirmation?.confirmedByMe && (
+        <button className="mt-4 rounded bg-blood px-4 py-2 text-white hover:bg-red-800" onClick={onContinue}>
+          {mode === 'reveal' ? '结算本轮' : '继续'}
+        </button>
+      )}
     </Panel>
   );
 }

@@ -157,7 +157,9 @@ describe('NetworkHost + NetworkPeer over in-memory transport', () => {
     // Confirm the remaining local players; the peer's earlier command should count.
     for (const p of controller.room.players) controller.confirmIdentity(p.id);
     expect(controller.phase).toBe('NIGHT_DOUBLE_KNIFE');
-    controller.confirmIdentity(controller.room.players[0]!.id);
+    for (const p of controller.room.players) {
+      controller.confirmIdentity(p.id);
+    }
     expect(controller.phase).toBe('ROUND_MAGIC_SELECT');
   });
 

@@ -47,6 +47,13 @@ export interface ClientRoundView {
   } | null;
 }
 
+export interface ClientPhaseConfirmation {
+  required: number;
+  confirmed: number;
+  confirmedByMe: boolean;
+  allConfirmed: boolean;
+}
+
 export interface ClientView {
   id: string;
   phase: GameState['phase'];
@@ -74,6 +81,7 @@ export interface ClientView {
     isRandomForced: boolean;
   };
   eventLog: GameState['eventLog'];
+  phaseConfirmation?: ClientPhaseConfirmation | null;
 }
 
 const toPublicPlayer = (player: GameState['players'][number]): ClientPlayerView => ({

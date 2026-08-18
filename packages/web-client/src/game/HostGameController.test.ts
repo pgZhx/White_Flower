@@ -19,7 +19,9 @@ describe('HostGameController', () => {
       controller.confirmIdentity(p.id);
     }
     expect(controller.phase).toBe('NIGHT_DOUBLE_KNIFE');
-    controller.confirmIdentity(controller.room.players[0]!.id);
+    for (const p of controller.room.players) {
+      controller.confirmIdentity(p.id);
+    }
     expect(controller.phase).toBe('ROUND_MAGIC_SELECT');
   });
 
@@ -53,7 +55,9 @@ describe('HostGameController full local game', () => {
       const phase = controller.phase;
 
       if (phase === 'NIGHT_DOUBLE_KNIFE') {
-        controller.confirmIdentity(hostId);
+        for (const p of controller.room.players) {
+          controller.confirmIdentity(p.id);
+        }
         continue;
       }
 
@@ -96,17 +100,23 @@ describe('HostGameController full local game', () => {
       }
 
       if (phase === 'ROUND_REVEAL') {
-        controller.handleCommand({ type: 'REVEAL', playerId: hostId });
+        for (const p of controller.room.players) {
+          controller.handleCommand({ type: 'REVEAL', playerId: p.id });
+        }
         continue;
       }
 
       if (phase === 'ROUND_RESOLUTION') {
-        controller.handleCommand({ type: 'RESOLVE_ROUND', playerId: hostId });
+        for (const p of controller.room.players) {
+          controller.handleCommand({ type: 'RESOLVE_ROUND', playerId: p.id });
+        }
         continue;
       }
 
       if (phase === 'CHECK_VICTORY') {
-        controller.handleCommand({ type: 'CHECK_VICTORY', playerId: hostId });
+        for (const p of controller.room.players) {
+          controller.handleCommand({ type: 'CHECK_VICTORY', playerId: p.id });
+        }
         continue;
       }
 

@@ -72,7 +72,7 @@ export class PeerGameClient implements GameClient {
   }
 
   get allIdentitiesConfirmed(): boolean {
-    return false;
+    return this.networkPeer.state.view?.phaseConfirmation?.allConfirmed ?? false;
   }
 
   get currentPlayerId(): string | null {

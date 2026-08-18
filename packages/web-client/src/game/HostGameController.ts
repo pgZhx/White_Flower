@@ -9,6 +9,14 @@ import {
 } from '@rose-blade/game-engine';
 import type { RoomPlayer, RoomState } from '@rose-blade/p2p-network';
 
+const PHASE_CONFIRMATION_REQUIRED = new Set<GameState['phase']>([
+  'NIGHT_RECOGNITION',
+  'NIGHT_DOUBLE_KNIFE',
+  'ROUND_REVEAL',
+  'ROUND_RESOLUTION',
+  'CHECK_VICTORY',
+]);
+
 export type GameCommand =
   | { type: 'READY'; playerId: string; ready: boolean }
   | { type: 'START_GAME'; playerId: string }
@@ -41,7 +49,7 @@ export class HostGameController {
   room: RoomState;
   private gameState: GameState | null = null;
   private engine: GameEngine | null = null;
-  private identityConfirmed = new Set<string>();
+  private phaseConfirmations = new Map<string, Set<string>>();
   private listeners = new Set<() => void>();
 
   constructor(options: HostGameControllerOptions) {
@@ -144,7 +152,7 @@ export class HostGameController {
     this.engine = new GameEngine(gameState);
     this.engine.startGame(new SeededRandom(this.seed));
     this.gameState = this.engine.getState();
-    this.identityConfirmed.clear();
+    this.phaseConfirmations.clear();
     this.room = { ...this.room, status: 'PLAYING' };
     this.emit();
   }
@@ -153,26 +161,91 @@ export class HostGameController {
     if (!this.engine || !this.gameState) {
       throw new Error('游戏尚未开始');
     }
-    if (this.phase === 'NIGHT_RECOGNITION') {
-      this.identityConfirmed.add(playerId);
-      if (this.identityConfirmed.size >= this.room.players.length) {
-        this.engine.performNightRecognition();
-        this.gameState = this.engine.getState();
-      }
-    } else if (this.phase === 'NIGHT_DOUBLE_KNIFE') {
-      // Night recognition information is now visible to every client.
-      // Any player may continue once the table has read the night info.
-      this.engine.performDoubleKnifeNight();
-      this.gameState = this.engine.getState();
+    const phase = this.gameState.phase;
+    if (!PHASE_CONFIRMATION_REQUIRED.has(phase)) {
+      return;
     }
+
+    const set = this.confirmationSet(phase);
+    set.add(playerId);
+
+    const required = this.connectedPlayerCount();
+    if (required > 0 && set.size >= required) {
+      this.advanceAfterConfirmation(phase);
+    }
+
     this.emit();
+  }
+
+  private connectedPlayerCount(): number {
+    return this.room.players.filter((p) => p.connected).length;
+  }
+
+  private confirmationSet(phase: GameState['phase']): Set<string> {
+    let set = this.phaseConfirmations.get(phase);
+    if (!set) {
+      set = new Set<string>();
+      this.phaseConfirmations.set(phase, set);
+    }
+    return set;
+  }
+
+  private allConfirmedFor(phase: GameState['phase']): boolean {
+    const required = this.connectedPlayerCount();
+    return required > 0 && this.confirmationSet(phase).size >= required;
+  }
+
+  private advanceAfterConfirmation(phase: GameState['phase']): void {
+    if (!this.engine || !this.gameState) {
+      return;
+    }
+    switch (phase) {
+      case 'NIGHT_RECOGNITION':
+        this.engine.performNightRecognition();
+        break;
+      case 'NIGHT_DOUBLE_KNIFE':
+        this.engine.performDoubleKnifeNight();
+        break;
+      case 'ROUND_REVEAL':
+        this.engine.revealRound(new SeededRandom(this.seed + this.gameState.roundNumber));
+        break;
+      case 'ROUND_RESOLUTION':
+        this.engine.resolveRound();
+        break;
+      case 'CHECK_VICTORY':
+        this.engine.checkVictoryAndAdvance();
+        break;
+      default:
+        return;
+    }
+    this.gameState = this.engine.getState();
+    this.phaseConfirmations.delete(phase);
   }
 
   getView(playerId: string): ClientView | null {
     if (!this.engine || !this.gameState) {
       return null;
     }
-    return buildPlayerView(this.gameState, playerId);
+    const view = buildPlayerView(this.gameState, playerId);
+    return {
+      ...view,
+      phaseConfirmation: this.getPhaseConfirmation(playerId),
+    };
+  }
+
+  getPhaseConfirmation(viewerId: string): NonNullable<ClientView['phaseConfirmation']> | null {
+    if (!this.gameState || !PHASE_CONFIRMATION_REQUIRED.has(this.gameState.phase)) {
+      return null;
+    }
+    const phase = this.gameState.phase;
+    const required = this.connectedPlayerCount();
+    const set = this.phaseConfirmations.get(phase) ?? new Set<string>();
+    return {
+      required,
+      confirmed: set.size,
+      confirmedByMe: set.has(viewerId),
+      allConfirmed: required > 0 && set.size >= required,
+    };
   }
 
   get hostView(): ClientView | null {
@@ -189,7 +262,9 @@ export class HostGameController {
   }
 
   get allIdentitiesConfirmed(): boolean {
-    return this.room.players.length > 0 && this.identityConfirmed.size >= this.room.players.length;
+    if (!this.gameState) return false;
+    if (!PHASE_CONFIRMATION_REQUIRED.has(this.gameState.phase)) return true;
+    return this.allConfirmedFor(this.gameState.phase);
   }
 
   get currentPlayerId(): string | null {
@@ -295,14 +370,14 @@ export class HostGameController {
         this.engine.submitMagic10Replacement(command.playerId, command.replacementCard);
         break;
       case 'REVEAL':
-        this.engine.revealRound(new SeededRandom(this.seed + this.gameState.roundNumber));
-        break;
+        this.confirmIdentity(command.playerId);
+        return;
       case 'RESOLVE_ROUND':
-        this.engine.resolveRound();
-        break;
+        this.confirmIdentity(command.playerId);
+        return;
       case 'CHECK_VICTORY':
-        this.engine.checkVictoryAndAdvance();
-        break;
+        this.confirmIdentity(command.playerId);
+        return;
     }
 
     this.gameState = this.engine.getState();

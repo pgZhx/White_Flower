@@ -4,7 +4,7 @@ const ROLE_LABELS: Record<Role, string> = {
   WHITE_ROSE: '白蔷薇',
   BISHOP: '司教',
   BELIEVER: '信徒',
-  GREAT_SWORD: '大剑',
+  GREAT_SWORD: '巨刃',
   DOUBLE_KNIFE: '双刃',
   DARK_KNIFE: '暗刃',
 };
@@ -18,8 +18,8 @@ const CARD_LABELS: Record<Card, string> = {
   WHITE_ROSE: '白蔷薇',
   BISHOP: '司教',
   BELIEVER: '信徒',
-  GHOST: '幽灵',
-  GREAT_SWORD: '大剑',
+  GHOST: '幽魂',
+  GREAT_SWORD: '巨刃',
   DOUBLE_KNIFE: '双刃',
   DARK_KNIFE: '暗刃',
 };
