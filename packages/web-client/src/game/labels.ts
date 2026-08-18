@@ -2,10 +2,10 @@ import type { Card, Faction, GamePhase, Role } from '@rose-blade/game-engine';
 
 const ROLE_LABELS: Record<Role, string> = {
   WHITE_ROSE: '白蔷薇',
-  BISHOP: '主教',
+  BISHOP: '司教',
   BELIEVER: '信徒',
   GREAT_SWORD: '大剑',
-  DOUBLE_KNIFE: '双刀',
+  DOUBLE_KNIFE: '双刃',
   DARK_KNIFE: '暗刃',
 };
 
@@ -16,11 +16,11 @@ const FACTION_LABELS: Record<Faction, string> = {
 
 const CARD_LABELS: Record<Card, string> = {
   WHITE_ROSE: '白蔷薇',
-  BISHOP: '主教',
+  BISHOP: '司教',
   BELIEVER: '信徒',
   GHOST: '幽灵',
   GREAT_SWORD: '大剑',
-  DOUBLE_KNIFE: '双刀',
+  DOUBLE_KNIFE: '双刃',
   DARK_KNIFE: '暗刃',
 };
 
@@ -28,7 +28,7 @@ const PHASE_LABELS: Record<GamePhase, string> = {
   LOBBY: '大厅',
   SETUP: '准备中',
   NIGHT_RECOGNITION: '夜间相认',
-  NIGHT_DOUBLE_KNIFE: '双刀夜间',
+  NIGHT_DOUBLE_KNIFE: '双刃夜间',
   ROUND_MAGIC_SELECT: '水晶选择',
   MAGIC_RESOLUTION: '魔法解析',
   PLAYER_ACTIONS: '玩家行动',

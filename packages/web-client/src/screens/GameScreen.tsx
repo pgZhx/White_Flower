@@ -21,7 +21,7 @@ const magicNames: Record<number, string> = {
   6: '调整行动顺序',
   7: '获得幽灵',
   8: '左右邻强制出牌',
-  9: '白蔷薇与主教信息',
+  9: '白蔷薇与司教信息',
   10: '换牌',
   11: '偷看一张手牌',
   12: '强制出牌',
@@ -153,7 +153,7 @@ export function GameScreen({ roomId, nickname, isHost, controller, onExit }: Gam
 
         {view.me.magic9Reveal && (
           <Panel title="魔法 9 私人信息">
-            <p className="text-stone-300">下面两名玩家分别是白蔷薇与主教：</p>
+            <p className="text-stone-300">下面两名玩家分别是白蔷薇与司教：</p>
             <div className="mt-2 flex gap-2">
               {[view.me.magic9Reveal.playerAId, view.me.magic9Reveal.playerBId].map((id) => (
                 <span key={id} className="rounded border border-stone-600 bg-stone-800 px-3 py-1">
@@ -289,7 +289,7 @@ function NightPanel({ view, onContinue }: { view: ClientView; onContinue: () => 
         <p className="mt-2 text-stone-400">你没有获得额外夜间信息。</p>
       )}
       {view.me.role === 'DOUBLE_KNIFE' && (
-        <p className="mt-2 text-rose">你的幽灵已替换为第二张双刀。</p>
+        <p className="mt-2 text-rose">你的幽灵已替换为第二张双刃。</p>
       )}
       <button className="mt-4 rounded bg-rose px-4 py-2 font-semibold text-stone-900 hover:bg-stone-100" onClick={onContinue}>
         进入下一阶段
