@@ -12,6 +12,10 @@
     "test:p2p": "npm run test --workspace @rose-blade/p2p-network",
     "test:web": "npm run test --workspace @rose-blade/web-client",
     "dev:web": "npm run dev --workspace @rose-blade/web-client",
-    "build:web": "npm run build --workspace @rose-blade/web-client"
+    "build:web": "npm run build --workspace @rose-blade/web-client",
+    "peer": "node server/peer-server.mjs"
+  },
+  "dependencies": {
+    "peerjs-server": "^0.2.9"
   }
 }

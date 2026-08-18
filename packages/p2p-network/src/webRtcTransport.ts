@@ -5,6 +5,10 @@ export interface WebRtcTransportOptions {
   role: 'host' | 'peer';
   peerId: string;
   hostPeerId?: string;
+  host?: string;
+  port?: number;
+  path?: string;
+  secure?: boolean;
 }
 
 /**
@@ -28,7 +32,12 @@ export class WebRtcTransport implements MultiplayerTransport {
 
   connect(): Promise<void> {
     return new Promise((resolve, reject) => {
-      const peer = new Peer(this.options.peerId);
+      const peer = new Peer(this.options.peerId, {
+        host: this.options.host ?? '0.peerjs.com',
+        port: this.options.port ?? 443,
+        path: this.options.path ?? '/',
+        secure: this.options.secure ?? true,
+      });
       this.peer = peer;
       let settled = false;
 

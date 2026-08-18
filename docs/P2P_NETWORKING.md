@@ -9,17 +9,18 @@
 - 房主浏览器是 authoritative host，持有完整 GameState 与唯一 GameEngine。
 - 普通玩家只向房主发送命令，并接收自己的 PlayerView。
 - WebRTC DataChannel 负责真实设备之间的点对点数据传输。
-- 我们不开发、不维护游戏后端/Signaling Server/Database。
+- 我们不开发、不维护游戏后端/Database；仅运行一个轻量 PeerJS Signaling 进程用于 WebRTC 信令。
 
-## 2. 为什么需要外部基础设施
+## 2. 信令基础设施
 
 WebRTC 本身不能自动发现对方或交换 SDP/ICE。
 
-因此本项目使用 **PeerJS**：
+本项目使用 **PeerJS**：
 
-- PeerJS 提供公共 cloud signaling server。
-- 浏览器通过 PeerJS 使用房间 ID / Peer ID 互相发现。
+- 本地开发默认使用 PeerJS 公共 cloud signaling server。
+- 公网部署时使用项目自带的轻量 PeerJS signaling server，由 Nginx 在 `/peerjs` 路径反向代理。
 - 实际媒体/数据通道仍然是 WebRTC DataChannel，数据不经过我们的服务器。
+- 信令服务器只转发 SDP/ICE，不承载游戏逻辑，不是 Game Server。
 - 部分 NAT 环境可能需要 STUN/TURN，PeerJS 默认包含公共 STUN，复杂网络可能需要额外 TURN。
 
 ## 3. 房间码即 Host Peer ID
@@ -36,7 +37,8 @@ WebRTC 本身不能自动发现对方或交换 SDP/ICE。
   peer.connect("AB7K2P")
 ```
 
-不需要数据库、不需要 Socket.IO、不需要 Node 后端。
+不需要数据库、不需要 Socket.IO、不需要游戏后端。
+公网部署时需要一个非常轻量的 PeerJS signaling 进程，仅用于 WebRTC 信令交换。
 如果 PeerJS 返回 ID 不可用，会自动重新生成房间码并重试。
 
 ## 4. 当前实现结构
@@ -162,19 +164,47 @@ MVP 明确限制：
 - Lobby 阶段：房主直接移除该玩家并广播新列表。
 - 游戏阶段：房主将该玩家标记为 disconnected，游戏继续进行或按当前规则处理；MVP 不提供游戏中重连恢复。
 
-## 11. 部署说明
+## 11. 自托管 PeerJS Signaling
+
+公网部署时建议同时运行 `server/peer-server.mjs`：
+
+```bash
+node server/peer-server.mjs
+```
+
+默认监听：
+
+```text
+0.0.0.0:9000/peerjs
+```
+
+Nginx 会代理：
+
+```text
+/peerjs -> 127.0.0.1:9000
+```
+
+因此浏览器不需要额外开放 9000 端口，只需要能访问网站本身的 80/443 端口。
+
+部署脚本 `scripts/deploy-static.sh` 会安装静态文件；服务器上的 systemd 服务名为：
+
+```text
+white-flower-peer.service
+```
+
+## 12. 部署说明
 
 - 前端构建为纯静态站点，可部署到 Vercel / Cloudflare Pages / GitHub Pages / Nginx。
 - 不需要运行 Node.js 游戏服务。
-- 公网联机依赖 PeerJS 公共信令与 STUN；如果遇到严格 NAT，再考虑配置 TURN。
+- 公网联机使用自托管 PeerJS Signaling；如果遇到严格 NAT，再考虑配置 TURN。
 
-## 12. 已知网络限制
+## 13. 已知网络限制
 
 - 部分企业网络、校园网、CGNAT、对称 NAT 环境下 P2P 连接可能失败。
 - 当前 MVP 优先覆盖常见家庭网络 / 手机网络。
 - 未来如果实测需要，再考虑自建或配置 TURN。
 
-## 13. 公网访问
+## 14. 公网访问
 
 项目已支持直接部署为公网静态站点，任何网络环境的浏览器都可以打开邀请链接。
 

@@ -59,6 +59,29 @@ function randomSeed(): number {
   return Date.now() + Math.floor(Math.random() * 100000);
 }
 
+function getPeerJSOptions(): {
+  host?: string;
+  port?: number;
+  path?: string;
+  secure?: boolean;
+} {
+  if (typeof window === 'undefined') return {};
+  const params = new URLSearchParams(window.location.search);
+  const isLocal = ['localhost', '127.0.0.1'].includes(window.location.hostname);
+  // Public deployment uses the self-hosted PeerJS signaling server via Nginx /peerjs.
+  // Local development keeps using PeerJS public cloud unless overridden.
+  if (params.get('peer') === 'public' || isLocal) return {};
+  const sameOriginPort = window.location.port
+    ? Number(window.location.port)
+    : (window.location.protocol === 'https:' ? 443 : 80);
+  return {
+    host: params.get('peerHost') ?? window.location.hostname,
+    port: params.get('peerPort') ? Number(params.get('peerPort')) : sameOriginPort,
+    path: params.get('peerPath') ?? '/peerjs',
+    secure: params.get('peerSecure') ? params.get('peerSecure') === '1' : window.location.protocol === 'https:',
+  };
+}
+
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : '发生未知错误，请重试。';
 }
@@ -69,7 +92,7 @@ async function createHostClient(nickname: string): Promise<HostGameClient> {
     const roomId = generateRoomCode();
     const controller = new HostGameController({ roomId, hostPlayerId: makePlayerId(), seed: randomSeed() });
     controller.addPlayer(nickname);
-    const transport = new WebRtcTransport({ role: 'host', peerId: roomId });
+    const transport = new WebRtcTransport({ role: 'host', peerId: roomId, ...getPeerJSOptions() });
     const networkHost = new NetworkHost(controller, transport);
     try {
       await transport.connect();
@@ -87,7 +110,7 @@ async function createHostClient(nickname: string): Promise<HostGameClient> {
 
 async function createPeerClient(nickname: string, roomId: string): Promise<PeerGameClient> {
   const peerId = makePeerId('guest');
-  const transport = new WebRtcTransport({ role: 'peer', peerId, hostPeerId: roomId });
+  const transport = new WebRtcTransport({ role: 'peer', peerId, hostPeerId: roomId, ...getPeerJSOptions() });
   try {
     await withTimeout(transport.connect(), 12000);
     const networkPeer = new NetworkPeer(transport, peerId);
