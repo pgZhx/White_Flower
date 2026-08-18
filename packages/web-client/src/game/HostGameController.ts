@@ -70,13 +70,14 @@ export class HostGameController {
   }
 
   addPlayer(nickname: string): RoomPlayer {
+    const isFirst = this.room.players.length === 0;
     const player: RoomPlayer = {
-      id: `local_${this.room.players.length + 1}_${Date.now().toString(36)}`,
+      id: isFirst ? this.hostPlayerId : `local_${this.room.players.length + 1}_${Date.now().toString(36)}`,
       nickname,
       seat: this.room.players.length,
       ready: false,
       connected: true,
-      isHost: this.room.players.length === 0,
+      isHost: isFirst,
     };
     this.room = {
       ...this.room,

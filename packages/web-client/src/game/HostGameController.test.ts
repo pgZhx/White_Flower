@@ -110,3 +110,12 @@ describe('HostGameController full local game', () => {
     expect(controller.getGameOverSnapshot()?.winner).toBeTruthy();
   });
 });
+
+describe('HostGameController player ids', () => {
+  it('uses hostPlayerId for the first local player', () => {
+    const controller = new HostGameController({ roomId: 'R', hostPlayerId: 'host-abc' });
+    const host = controller.addPlayer('Me');
+    expect(host.id).toBe('host-abc');
+    expect(host.isHost).toBe(true);
+  });
+});
