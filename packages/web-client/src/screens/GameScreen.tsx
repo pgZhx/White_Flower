@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Card, ClientView } from '@rose-blade/game-engine';
 import type { HostGameController } from '../game/HostGameController';
+import { cardLabel, factionLabel, roleLabel } from '../game/labels';
 
 interface GameScreenProps {
   roomId: string;
@@ -244,8 +245,8 @@ function IdentityPanel({
   return (
     <div className="mt-6 rounded-lg border border-rose/40 bg-stone-900 p-6">
       <h2 className="text-xl font-serif text-rose">你的身份</h2>
-      <p className="mt-2 text-3xl font-bold">{view.me.role}</p>
-      <p className="text-stone-300">阵营：{view.me.faction}</p>
+      <p className="mt-2 text-3xl font-bold">{roleLabel(view.me.role)}</p>
+      <p className="text-stone-300">阵营：{factionLabel(view.me.faction)}</p>
       <div className="mt-4">
         <p className="text-sm text-stone-400">初始手牌</p>
         <div className="mt-1 flex flex-wrap gap-2">
@@ -461,7 +462,7 @@ function ActionPanel({
               className={`rounded border px-3 py-1 ${selectedCard === card ? 'border-rose bg-rose text-stone-900' : 'border-stone-600 text-stone-200 hover:bg-stone-700'}`}
               onClick={() => setSelectedCard((cur) => (cur === card ? null : card))}
             >
-              {card}
+              {cardLabel(card)}
             </button>
           ))}
         </div>
@@ -543,7 +544,7 @@ function Magic10Panel({
             className="rounded border border-rose px-4 py-2 text-rose hover:bg-rose hover:text-stone-900"
             onClick={() => controller.handleCommand({ type: 'MAGIC10_REPLACEMENT', playerId: activePlayerId, replacementCard: card })}
           >
-            {card}
+            {cardLabel(card)}
           </button>
         ))}
       </div>
@@ -625,9 +626,9 @@ function GameOverPanel({
         {gameOver.players.map((p) => (
           <div key={p.id} className="rounded border border-stone-700 bg-stone-950 p-3 text-sm">
             <p className="font-semibold">{p.nickname}</p>
-            <p>身份：{p.role}</p>
-            <p>阵营：{p.faction}</p>
-            <p>手牌：{p.hand.join(', ') || '空'}</p>
+            <p>身份：{roleLabel(p.role)}</p>
+            <p>阵营：{factionLabel(p.faction)}</p>
+            <p>手牌：{p.hand.map(cardLabel).join(', ') || '空'}</p>
           </div>
         ))}
       </div>
@@ -655,9 +656,9 @@ function Board({ view, myPlayerId }: { view: ClientView; myPlayerId: string }) {
       </div>
       <div className="rounded-lg border border-stone-700 bg-stone-900 p-4">
         <h3 className="text-sm text-stone-400">我的区域</h3>
-        <p>身份：{view.me.role}</p>
-        <p>阵营：{view.me.faction}</p>
-        <p>手牌：{view.me.hand.join(', ') || '空'}</p>
+        <p>身份：{roleLabel(view.me.role)}</p>
+        <p>阵营：{factionLabel(view.me.faction)}</p>
+        <p>手牌：{view.me.hand.map(cardLabel).join(', ') || '空'}</p>
         <p>水晶：{view.me.crystal ?? '已使用'}</p>
       </div>
     </div>
@@ -674,5 +675,5 @@ function Panel({ title, children }: { title: string; children: React.ReactNode }
 }
 
 function CardBadge({ card }: { card: Card }) {
-  return <span className="rounded border border-stone-600 bg-stone-800 px-3 py-1">{card}</span>;
+  return <span className="rounded border border-stone-600 bg-stone-800 px-3 py-1">{cardLabel(card)}</span>;
 }
