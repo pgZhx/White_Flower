@@ -150,6 +150,31 @@ export function GameScreen({ roomId, nickname, isHost, controller, onExit }: Gam
           <GameOverPanel gameOver={gameOver} onExit={onExit} />
         )}
 
+        {view.me.magic9Reveal && (
+          <Panel title="Magic 9 私人信息">
+            <p className="text-stone-300">下面两名玩家分别是 White Rose 与 Bishop：</p>
+            <div className="mt-2 flex gap-2">
+              {[view.me.magic9Reveal.playerAId, view.me.magic9Reveal.playerBId].map((id) => (
+                <span key={id} className="rounded border border-stone-600 bg-stone-800 px-3 py-1">
+                  {view.players.find((p) => p.id === id)?.nickname ?? id}
+                </span>
+              ))}
+            </div>
+            <p className="mt-2 text-xs text-stone-500">具体身份未知。</p>
+          </Panel>
+        )}
+
+        {view.me.magic11Seen && (
+          <Panel title="Magic 11 私人信息">
+            <p className="text-stone-300">
+              你随机看到 {view.players.find((p) => p.id === view.me.magic11Seen?.targetId)?.nickname ?? '目标'} 的一张手牌：
+            </p>
+            <div className="mt-2">
+              <CardBadge card={view.me.magic11Seen.card} />
+            </div>
+          </Panel>
+        )}
+
         <Board view={view} myPlayerId={activeViewerId} />
       </div>
     </div>
