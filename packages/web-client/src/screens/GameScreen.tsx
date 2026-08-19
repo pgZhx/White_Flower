@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { getPlayerCountRules, isBud, type Card, type ClientView } from '@rose-blade/game-engine';
 import type { GameClient } from '../game/GameClient';
 import { cardLabel, factionLabel, formatPile, phaseLabel, roleLabel } from '../game/labels';
+import { RoundTable } from '../components/RoundTable';
 
 interface GameScreenProps {
   roomId: string;
@@ -1045,56 +1046,16 @@ function GameOverPanel({
 
 function SeatMap({ view, myPlayerId }: { view: ClientView; myPlayerId: string }) {
   const me = view.players.find((p) => p.id === myPlayerId);
+  const [collapsed, setCollapsed] = useState(false);
   if (!me || view.players.length === 0) return null;
 
-  const sorted = [...view.players].sort((a, b) => a.seatIndex - b.seatIndex);
-  const myIndex = sorted.findIndex((p) => p.id === myPlayerId);
-  const ordered = [...sorted.slice(myIndex), ...sorted.slice(0, myIndex)];
-  const leftNeighbor = sorted[(myIndex - 1 + sorted.length) % sorted.length] ?? me;
-  const rightNeighbor = sorted[(myIndex + 1) % sorted.length] ?? me;
-
-  const seatChip = (player: { id: string; nickname: string }, label: string, isMe: boolean) => {
-    const isCoin = player.id === view.currentCoinHolderId;
-    return (
-      <div
-        key={player.id}
-        className={`rounded border px-2 py-1 text-xs ${isMe ? 'border-rose bg-rose/15 text-rose' : 'border-stone-600 bg-stone-950 text-stone-300'}`}
-      >
-        <span>{isCoin ? '💰 ' : ''}</span>
-        <span className="font-semibold">{label}</span>
-        <span className="ml-1">{player.nickname}</span>
-      </div>
-    );
-  };
-
   return (
-    <div className="mt-6 rounded-lg border border-stone-700 bg-stone-900 p-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold text-rose">座位图</h3>
-        <span className="text-xs text-stone-500">💰 = 当前金币持有人</span>
-      </div>
-      <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
-        {seatChip(leftNeighbor, '左邻', false)}
-        {seatChip(me, '你', true)}
-        {seatChip(rightNeighbor, '右邻', false)}
-      </div>
-      <div className="mt-3 flex flex-wrap items-center justify-center gap-1 text-xs text-stone-400">
-        {ordered.map((player, i) => {
-          const rightCount = i;
-          const leftCount = ordered.length - i;
-          const label = i === 0 ? '你' : rightCount <= leftCount ? `右${rightCount}` : `左${leftCount}`;
-          return (
-            <span key={player.id} className="inline-flex items-center gap-1">
-              {i > 0 && <span className="text-stone-600">→</span>}
-              <span className={player.id === view.currentCoinHolderId ? 'text-amber-300' : ''}>
-                {player.id === view.currentCoinHolderId ? '💰 ' : ''}
-                {label}·{player.nickname}
-              </span>
-            </span>
-          );
-        })}
-      </div>
-    </div>
+    <section className={`seat-map${collapsed ? ' seat-map--collapsed' : ''}`}>
+      <button className="seat-map__toggle" type="button" onClick={() => setCollapsed((value) => !value)} aria-expanded={!collapsed}>
+        {collapsed ? '展开座位图' : '收起座位图'}
+      </button>
+      {!collapsed && <RoundTable players={view.players} myPlayerId={myPlayerId} coinHolderId={view.currentCoinHolderId} />}
+    </section>
   );
 }
 
@@ -1108,7 +1069,6 @@ function Board({ view, myPlayerId }: { view: ClientView; myPlayerId: string }) {
       <div className="rounded-lg border border-stone-700 bg-stone-900 p-4">
         <h3 className="text-sm text-stone-400">当前状态</h3>
         <p className="mt-2">阶段：{phaseLabel(view.phase)}</p>
-        <p>当前金币：{view.players.find((p) => p.id === view.currentCoinHolderId)?.nickname ?? '无'}</p>
         <p>白蔷薇安全：{view.whiteRoseSafe ? '是' : '否'}</p>
       </div>
       <div className="rounded-lg border border-stone-700 bg-stone-900 p-4">
