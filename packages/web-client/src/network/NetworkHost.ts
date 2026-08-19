@@ -106,8 +106,24 @@ export class NetworkHost {
         this.broadcastAll();
         return;
       }
-      this.sendError(peerId, 'SESSION_MISMATCH', '已有相同连接但昵称不匹配，请返回首页重新加入');
-      return;
+
+      // Same browser/connection is trying to use a different nickname.
+      if (this.controller.room.status !== 'LOBBY') {
+        this.sendError(peerId, 'SESSION_MISMATCH', '游戏中不能更换昵称，请用原来的昵称刷新重连。');
+        return;
+      }
+
+      // In the lobby we allow the same browser to switch nickname: drop the old
+      // seat and continue as a fresh join.
+      const timer = this.disconnectTimers.get(peerId);
+      if (timer) {
+        clearTimeout(timer);
+        this.disconnectTimers.delete(peerId);
+      }
+      this.controller.removePlayer(existingPlayerId);
+      this.peerToPlayer.delete(peerId);
+      this.playerToPeer.delete(existingPlayerId);
+      this.peerSessions.delete(peerId);
     }
 
     // If a returning player supplies their old playerId (stored locally before a
