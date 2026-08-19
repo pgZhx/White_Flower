@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { Card, ClientView } from '@rose-blade/game-engine';
+import { getPlayerCountRules, isBud, type Card, type ClientView } from '@rose-blade/game-engine';
 import type { GameClient } from '../game/GameClient';
 import { cardLabel, factionLabel, formatPile, phaseLabel, roleLabel } from '../game/labels';
 
@@ -11,6 +11,8 @@ interface GameScreenProps {
   client: GameClient | null;
   debug: boolean;
   onExit: () => void;
+  onBackToRoom: () => void;
+  onRematch: () => void;
 }
 
 const magicNames: Record<number, string> = {
@@ -67,7 +69,7 @@ const magicBook: Array<{ id: number; name: string; description: string }> = [
   {
     id: 8,
     name: magicNames[8]!,
-    description: '你左右两侧玩家本轮必须出牌。',
+    description: '你左右两侧玩家本轮必须出牌（可自己选择出哪张）。',
   },
   {
     id: 9,
@@ -91,7 +93,63 @@ const magicBook: Array<{ id: number; name: string; description: string }> = [
   },
 ];
 
-export function GameScreen({ roomId, nickname, isHost, client, debug, onExit }: GameScreenProps) {
+function playerNameById(view: ClientView, id: unknown): string {
+  return typeof id === 'string' ? view.players.find((p) => p.id === id)?.nickname ?? id : '';
+}
+
+function formatMagicResolution(view: ClientView, payload: Record<string, unknown>): string | null {
+  const magicId = Number(payload.magicId ?? 0);
+  if (payload.skipped) return magicId === 10 ? '不发动' : '无合法目标，跳过';
+
+  switch (magicId) {
+    case 1:
+    case 7:
+    case 11:
+    case 12:
+      if (typeof payload.targetId === 'string') return `目标：${playerNameById(view, payload.targetId)}`;
+      break;
+    case 3:
+      if (typeof payload.neighborId === 'string') return `右侧：${playerNameById(view, payload.neighborId)}`;
+      break;
+    case 4:
+      if (typeof payload.neighborId === 'string') return `左侧：${playerNameById(view, payload.neighborId)}`;
+      break;
+    case 5:
+      if (Array.isArray(payload.targetIds)) {
+        const names = payload.targetIds.map((id) => playerNameById(view, id)).join('、');
+        if (names) return `目标：${names}`;
+      }
+      break;
+    case 6:
+      if (payload.choice === 'LAST') return '选择最后行动';
+      if (payload.choice === 'FIRST') return '选择正常顺序';
+      break;
+    case 8:
+      if (typeof payload.leftId === 'string' && typeof payload.rightId === 'string') {
+        return `左邻：${playerNameById(view, payload.leftId)}，右邻：${playerNameById(view, payload.rightId)}`;
+      }
+      break;
+    case 10:
+      if (typeof payload.targetId === 'string') return `目标：${playerNameById(view, payload.targetId)}`;
+      break;
+    default:
+      break;
+  }
+
+  return null;
+}
+
+function getCurrentMagicResolvedEvent(view: ClientView): { payload: Record<string, unknown> } | null {
+  for (let i = view.eventLog.length - 1; i >= 0; i -= 1) {
+    const event = view.eventLog[i];
+    if (!event) continue;
+    if (event.type === 'CRYSTAL_REVEALED') break;
+    if (event.type === 'MAGIC_RESOLVED') return event;
+  }
+  return null;
+}
+
+export function GameScreen({ roomId, nickname, isHost, client, debug, onExit, onBackToRoom, onRematch }: GameScreenProps) {
   const [, setTick] = useState(0);
   const [viewAs, setViewAs] = useState<string | null>(null);
 
@@ -221,7 +279,7 @@ export function GameScreen({ roomId, nickname, isHost, client, debug, onExit }: 
             )}
 
             {phase === 'GAME_OVER' && gameOver && (
-              <GameOverPanel gameOver={gameOver} onExit={onExit} />
+              <GameOverPanel gameOver={gameOver} onBackToRoom={onBackToRoom} onRematch={onRematch} />
             )}
 
             {view.me.magic9Reveal && (
@@ -248,6 +306,8 @@ export function GameScreen({ roomId, nickname, isHost, client, debug, onExit }: 
                 </div>
               </Panel>
             )}
+
+            <SeatMap view={view} myPlayerId={activeViewerId} />
 
             <Board view={view} myPlayerId={activeViewerId} />
 
@@ -339,8 +399,8 @@ function buildRoundHistory(view: ClientView): RoundHistoryEntry[] {
     if (event.type === 'MAGIC_RESOLVED') {
       const magicId = Number(payload.magicId ?? 0);
       const magic = magicBook.find((m) => m.id === magicId);
-      const skipped = payload.skipped ? '（无合法目标，跳过）' : '';
-      current.magic = `${magicId}. ${magic?.name ?? '未知魔法'}${skipped}`;
+      const details = formatMagicResolution(view, payload);
+      current.magic = `${magicId}. ${magic?.name ?? '未知魔法'}${details ? `（${details}）` : ''}`;
       continue;
     }
     if (event.type === 'CARD_PLAYED') {
@@ -376,11 +436,20 @@ function buildRoundHistory(view: ClientView): RoundHistoryEntry[] {
 
 function RoundHistoryPanel({ view }: { view: ClientView }) {
   const history = useMemo(() => buildRoundHistory(view), [view]);
+  const [historyOpen, setHistoryOpen] = useState(true);
 
   return (
     <div className="rounded-lg border border-stone-700 bg-stone-900 p-4">
-      <h3 className="text-sm font-semibold text-rose">出牌记录</h3>
-      {history.length === 0 ? (
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-sm font-semibold text-rose">出牌记录</h3>
+        <button
+          className="rounded border border-stone-600 px-2 py-0.5 text-xs text-stone-300 hover:bg-stone-700"
+          onClick={() => setHistoryOpen((open) => !open)}
+        >
+          {historyOpen ? '收起' : '展开'}
+        </button>
+      </div>
+      {historyOpen && (history.length === 0 ? (
         <p className="mt-2 text-xs text-stone-500">游戏开始后这里会记录每一轮的出牌情况。</p>
       ) : (
         <div className="mt-3 space-y-4">
@@ -423,7 +492,7 @@ function RoundHistoryPanel({ view }: { view: ClientView }) {
             </div>
           ))}
         </div>
-      )}
+      ))}
     </div>
   );
 }
@@ -434,12 +503,15 @@ function MagicNotice({ view }: { view: ClientView }) {
   const magic = magicBook.find((m) => m.id === round.magicNumber);
   const casterName = view.players.find((p) => p.id === round.crystalRevealerId)?.nickname ?? '未知玩家';
   const waiting = view.phase === 'MAGIC_RESOLUTION';
+  const resolvedEvent = getCurrentMagicResolvedEvent(view);
+  const details = resolvedEvent ? formatMagicResolution(view, resolvedEvent.payload) : null;
 
   return (
     <div className="rounded-lg border border-rose/40 bg-rose/10 px-4 py-3">
       <p className="text-sm text-rose">
         <span className="font-semibold">本轮魔法：{round.magicNumber}. {magic?.name ?? '未知'}</span>
         <span className="ml-3">发动者：{casterName}</span>
+        {details && <span className="ml-3">{details}</span>}
         <span className="ml-3">{waiting ? '等待发动者解析…' : '已生效'}</span>
       </p>
     </div>
@@ -938,10 +1010,12 @@ function ResolutionPanel({
 
 function GameOverPanel({
   gameOver,
-  onExit,
+  onBackToRoom,
+  onRematch,
 }: {
   gameOver: NonNullable<ReturnType<GameClient['getGameOverSnapshot']>>;
-  onExit: () => void;
+  onBackToRoom: () => void;
+  onRematch: () => void;
 }) {
   return (
     <Panel title="游戏结束">
@@ -957,14 +1031,78 @@ function GameOverPanel({
           </div>
         ))}
       </div>
-      <button className="mt-5 rounded bg-blood px-4 py-2 font-semibold text-white hover:bg-red-800" onClick={onExit}>
-        返回首页
-      </button>
+      <div className="mt-5 flex flex-wrap gap-2">
+        <button className="rounded bg-blood px-4 py-2 font-semibold text-white hover:bg-red-800" onClick={onRematch}>
+          再来一局
+        </button>
+        <button className="rounded border border-stone-600 px-4 py-2 font-semibold text-stone-300 hover:bg-stone-700" onClick={onBackToRoom}>
+          返回房间
+        </button>
+      </div>
     </Panel>
   );
 }
 
+function SeatMap({ view, myPlayerId }: { view: ClientView; myPlayerId: string }) {
+  const me = view.players.find((p) => p.id === myPlayerId);
+  if (!me || view.players.length === 0) return null;
+
+  const sorted = [...view.players].sort((a, b) => a.seatIndex - b.seatIndex);
+  const myIndex = sorted.findIndex((p) => p.id === myPlayerId);
+  const ordered = [...sorted.slice(myIndex), ...sorted.slice(0, myIndex)];
+  const leftNeighbor = sorted[(myIndex - 1 + sorted.length) % sorted.length] ?? me;
+  const rightNeighbor = sorted[(myIndex + 1) % sorted.length] ?? me;
+
+  const seatChip = (player: { id: string; nickname: string }, label: string, isMe: boolean) => {
+    const isCoin = player.id === view.currentCoinHolderId;
+    return (
+      <div
+        key={player.id}
+        className={`rounded border px-2 py-1 text-xs ${isMe ? 'border-rose bg-rose/15 text-rose' : 'border-stone-600 bg-stone-950 text-stone-300'}`}
+      >
+        <span>{isCoin ? '💰 ' : ''}</span>
+        <span className="font-semibold">{label}</span>
+        <span className="ml-1">{player.nickname}</span>
+      </div>
+    );
+  };
+
+  return (
+    <div className="mt-6 rounded-lg border border-stone-700 bg-stone-900 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-sm font-semibold text-rose">座位图</h3>
+        <span className="text-xs text-stone-500">💰 = 当前金币持有人</span>
+      </div>
+      <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+        {seatChip(leftNeighbor, '左邻', false)}
+        {seatChip(me, '你', true)}
+        {seatChip(rightNeighbor, '右邻', false)}
+      </div>
+      <div className="mt-3 flex flex-wrap items-center justify-center gap-1 text-xs text-stone-400">
+        {ordered.map((player, i) => {
+          const rightCount = i;
+          const leftCount = ordered.length - i;
+          const label = i === 0 ? '你' : rightCount <= leftCount ? `右${rightCount}` : `左${leftCount}`;
+          return (
+            <span key={player.id} className="inline-flex items-center gap-1">
+              {i > 0 && <span className="text-stone-600">→</span>}
+              <span className={player.id === view.currentCoinHolderId ? 'text-amber-300' : ''}>
+                {player.id === view.currentCoinHolderId ? '💰 ' : ''}
+                {label}·{player.nickname}
+              </span>
+            </span>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function Board({ view, myPlayerId }: { view: ClientView; myPlayerId: string }) {
+  const rules = getPlayerCountRules(view.players.length);
+  const sacrificeBuds = view.sacrificePile.filter(isBud).length;
+  const deathBuds = view.deathPile.filter(isBud).length;
+
   return (
     <div className="mt-6 grid gap-4 md:grid-cols-3">
       <div className="rounded-lg border border-stone-700 bg-stone-900 p-4">
@@ -978,6 +1116,20 @@ function Board({ view, myPlayerId }: { view: ClientView; myPlayerId: string }) {
         <p>献祭区：{formatPile(view.sacrificePile)}</p>
         <p>死亡区：{formatPile(view.deathPile)}</p>
         <p>血刃区：{formatPile(view.bladePile)}</p>
+        <div className="mt-3 border-t border-stone-700 pt-2 text-xs text-stone-400">
+          <p className="font-semibold text-stone-300">获胜条件</p>
+          <p className="mt-1">
+            白蔷薇：白蔷薇安全 + 献祭花苞 {sacrificeBuds}/{rules.sacrificeThreshold}
+            {view.whiteRoseSafe ? '' : '（还需白蔷薇安全）'}
+          </p>
+          <p>血刃：死亡花苞 {deathBuds}/{rules.deathThreshold}</p>
+          <p className="mt-1 text-stone-500">
+            {view.whiteRoseSafe
+              ? `白方还差 ${Math.max(0, rules.sacrificeThreshold - sacrificeBuds)} 张献祭花苞获胜`
+              : `白方还需先让白蔷薇安全，再凑满 ${rules.sacrificeThreshold} 张献祭花苞`}
+          </p>
+          <p className="text-stone-500">血方还差 {Math.max(0, rules.deathThreshold - deathBuds)} 张死亡花苞获胜</p>
+        </div>
       </div>
       <div className="rounded-lg border border-stone-700 bg-stone-900 p-4">
         <h3 className="text-sm text-stone-400">我的区域</h3>

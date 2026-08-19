@@ -22,6 +22,7 @@ export type SavedRoomSession = PeerSession | HostSession;
 const PEER_PREFIX = 'white-flower:peer:';
 const HOST_PREFIX = 'white-flower:host:';
 const LAST_HOST_KEY = 'white-flower:last-host-room';
+const LAST_PEER_KEY = 'white-flower:last-peer-room';
 
 function safeGet(key: string): string | null {
   try {
@@ -49,6 +50,7 @@ function safeRemove(key: string): void {
 
 export function savePeerSession(session: PeerSession): void {
   safeSet(`${PEER_PREFIX}${session.roomId}`, JSON.stringify(session));
+  safeSet(LAST_PEER_KEY, session.roomId);
 }
 
 export function loadPeerSession(roomId: string): PeerSession | null {
@@ -65,6 +67,7 @@ export function loadPeerSession(roomId: string): PeerSession | null {
 
 export function clearPeerSession(roomId: string): void {
   safeRemove(`${PEER_PREFIX}${roomId}`);
+  if (loadLastPeerRoom() === roomId) safeRemove(LAST_PEER_KEY);
 }
 
 export function saveHostSession(session: HostSession, snapshot: HostGameControllerSnapshot): void {
@@ -86,6 +89,10 @@ export function loadHostSession(roomId: string): { session: HostSession; snapsho
 
 export function loadLastHostRoom(): string | null {
   return safeGet(LAST_HOST_KEY);
+}
+
+export function loadLastPeerRoom(): string | null {
+  return safeGet(LAST_PEER_KEY);
 }
 
 export function clearHostSession(roomId: string): void {

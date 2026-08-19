@@ -135,7 +135,14 @@ const isRandomForced = (state: GameState, playerId: string): boolean => {
   if (!round) return false;
   return (
     round.randomForcedLeft === playerId ||
-    round.randomForcedRight === playerId ||
+    round.randomForcedRight === playerId
+  );
+};
+
+const isMagic8Forced = (state: GameState, playerId: string): boolean => {
+  const round = state.round;
+  if (!round) return false;
+  return (
     round.magic8Neighbors?.leftId === playerId ||
     round.magic8Neighbors?.rightId === playerId
   );
@@ -149,6 +156,9 @@ const mustPlay = (state: GameState, playerId: string): boolean => {
     return player.hand.length > 0;
   }
   if (isRandomForced(state, playerId)) {
+    return player.hand.length > 0;
+  }
+  if (isMagic8Forced(state, playerId)) {
     return player.hand.length > 0;
   }
   if (round.magic5Constraint?.laterId === playerId) {

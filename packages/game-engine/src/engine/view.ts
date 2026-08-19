@@ -154,12 +154,14 @@ const canPass = (state: GameState, playerId: string): boolean => {
   const player = getPlayer(state, playerId);
   const isRandomForced = (
     round.randomForcedLeft === playerId ||
-    round.randomForcedRight === playerId ||
+    round.randomForcedRight === playerId
+  );
+  const isMagic8Forced = (
     round.magic8Neighbors?.leftId === playerId ||
     round.magic8Neighbors?.rightId === playerId
   );
   if (round.forcedPlay.includes(playerId) && player.hand.length > 0) return false;
-  if (isRandomForced && player.hand.length > 0) return false;
+  if ((isRandomForced || isMagic8Forced) && player.hand.length > 0) return false;
   if (round.magic5Constraint?.laterId === playerId) {
     const earlier = round.actions[round.magic5Constraint.earlierId];
     return earlier?.type === 'PASS';
@@ -172,9 +174,7 @@ const isRandomForcedForView = (state: GameState, playerId: string): boolean => {
   if (!round) return false;
   return (
     round.randomForcedLeft === playerId ||
-    round.randomForcedRight === playerId ||
-    round.magic8Neighbors?.leftId === playerId ||
-    round.magic8Neighbors?.rightId === playerId
+    round.randomForcedRight === playerId
   );
 };
 

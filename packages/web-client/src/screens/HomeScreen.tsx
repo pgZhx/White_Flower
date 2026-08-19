@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 interface HomeScreenProps {
   initialRoom?: string | undefined;
@@ -9,6 +9,10 @@ interface HomeScreenProps {
 export function HomeScreen({ initialRoom, onCreate, onJoin }: HomeScreenProps) {
   const [nickname, setNickname] = useState('');
   const [roomId, setRoomId] = useState(initialRoom ?? '');
+
+  useEffect(() => {
+    if (initialRoom) setRoomId(initialRoom);
+  }, [initialRoom]);
 
   const handleCreate = () => {
     if (!nickname.trim()) return;

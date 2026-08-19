@@ -22,6 +22,7 @@ import {
   clearRoomSession,
   loadHostSession,
   loadLastHostRoom,
+  loadLastPeerRoom,
   loadPeerSession,
   saveHostSession,
   savePeerSession,
@@ -390,6 +391,26 @@ export default function App() {
     setScreen({ name: 'home' });
   };
 
+  const handleBackToRoom = () => {
+    if (!client) return;
+    const roomId = client.roomId;
+    const nickname = screen.name === 'game' ? screen.nickname : '';
+    const playerId = client.playerId ?? '';
+    const isHost = client.isHost;
+    client.handleCommand({ type: 'RESTART_GAME', playerId });
+    setScreen({ name: 'lobby', roomId, nickname, playerId, isHost });
+  };
+
+  const handleRematch = () => {
+    if (!client) return;
+    const roomId = client.roomId;
+    const nickname = screen.name === 'game' ? screen.nickname : '';
+    const playerId = client.playerId ?? '';
+    const isHost = client.isHost;
+    client.handleCommand({ type: 'REMATCH', playerId });
+    setScreen({ name: 'game', roomId, nickname, playerId, isHost });
+  };
+
   const handleStart = () => {
     if (!client) return;
     client.startGame();
@@ -404,7 +425,7 @@ export default function App() {
 
   useEffect(() => {
     if (debugMode || !roomParamReady || screen.name !== 'home' || client) return;
-    const roomToRestore = initialRoom ?? loadLastHostRoom();
+    const roomToRestore = (initialRoom ?? loadLastHostRoom() ?? loadLastPeerRoom())?.trim().toUpperCase();
     if (!roomToRestore) return;
 
     let cancelled = false;
@@ -462,7 +483,7 @@ export default function App() {
   if (screen.name === 'home') {
     return (
       <HomeScreen
-        initialRoom={initialRoom ?? undefined}
+        initialRoom={initialRoom ?? (roomParamReady ? loadLastHostRoom() ?? loadLastPeerRoom() ?? undefined : undefined)}
         onCreate={handleCreate}
         onJoin={handleJoin}
       />
@@ -514,6 +535,8 @@ export default function App() {
       client={client}
       debug={debugMode}
       onExit={handleLeave}
+      onBackToRoom={handleBackToRoom}
+      onRematch={handleRematch}
     />
   );
 }

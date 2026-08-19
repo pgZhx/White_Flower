@@ -48,11 +48,11 @@ export function LobbyScreen({
   const addSimulatedPlayer = () => {
     if (!debug || !client || client.isHost !== true || !canAdd) return;
     // Debug-only local simulation: use the host controller directly through a cast.
-    const debugClient = client as unknown as { addPlayer(nickname: string): void };
+    const debugClient = client as unknown as { controller: { addPlayer(nickname: string): void } };
     const names = ['艾丽丝', '鲍勃', '卡罗尔', '戴夫', '伊芙', '弗兰克', '格蕾丝', '海蒂', '伊万'];
     const used = new Set(players.map((p) => p.nickname));
     const name = names.find((n) => !used.has(n)) ?? `玩家${players.length + 1}`;
-    debugClient.addPlayer(name);
+    debugClient.controller.addPlayer(name);
   };
 
   const toggleReady = (id: string) => {
@@ -66,10 +66,8 @@ export function LobbyScreen({
       client.setReady(!player.ready);
     } else if (debug && client.isHost) {
       // In debug local simulation we still allow toggling any player.
-      const controller = client as unknown as {
-        setReady(id: string, ready: boolean): void;
-      };
-      controller.setReady(id, !player.ready);
+      const debugClient = client as unknown as { controller: { setReady(id: string, ready: boolean): void } };
+      debugClient.controller.setReady(id, !player.ready);
     }
   };
 

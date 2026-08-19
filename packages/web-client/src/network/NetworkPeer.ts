@@ -153,6 +153,7 @@ export class NetworkPeer {
       this.state = {
         ...this.state,
         room: snapshot.payload.roomState,
+        view: snapshot.payload.roomState.status === 'LOBBY' ? null : this.state.view,
       };
       this.emit();
       return;

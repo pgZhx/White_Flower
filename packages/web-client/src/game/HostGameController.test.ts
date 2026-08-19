@@ -25,6 +25,23 @@ describe('HostGameController', () => {
     expect(controller.phase).toBe('ROUND_MAGIC_SELECT');
   });
 
+  it('can reset a running game back to the lobby', () => {
+    const controller = makeFivePlayerController();
+    expect(controller.phase).toBe('NIGHT_RECOGNITION');
+    controller.restartGame();
+    expect(controller.phase).toBe('LOBBY');
+    expect(controller.room.status).toBe('LOBBY');
+    expect(controller.room.players.every((p) => !p.ready)).toBe(true);
+  });
+
+  it('can immediately rematch into a new game', () => {
+    const controller = makeFivePlayerController();
+    controller.rematch();
+    expect(controller.phase).toBe('NIGHT_RECOGNITION');
+    expect(controller.room.status).toBe('PLAYING');
+    expect(controller.room.players.every((p) => p.ready)).toBe(true);
+  });
+
   it('returns personalized views that do not leak other players roles', () => {
     const controller = makeFivePlayerController();
     const view = controller.getView(controller.room.players[1]!.id);

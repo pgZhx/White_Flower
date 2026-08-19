@@ -34,7 +34,9 @@ export type GameCommand =
   | { type: 'MAGIC10_REPLACEMENT'; playerId: string; replacementCard: Card }
   | { type: 'REVEAL'; playerId: string }
   | { type: 'RESOLVE_ROUND'; playerId: string }
-  | { type: 'CHECK_VICTORY'; playerId: string };
+  | { type: 'CHECK_VICTORY'; playerId: string }
+  | { type: 'RESTART_GAME'; playerId: string }
+  | { type: 'REMATCH'; playerId: string };
 
 export interface HostGameControllerOptions {
   roomId: string;
@@ -317,9 +319,7 @@ export class HostGameController {
     const round = this.gameState.round;
     return (
       round.randomForcedLeft === playerId ||
-      round.randomForcedRight === playerId ||
-      round.magic8Neighbors?.leftId === playerId ||
-      round.magic8Neighbors?.rightId === playerId
+      round.randomForcedRight === playerId
     );
   }
 
@@ -340,6 +340,32 @@ export class HostGameController {
         hand: [...p.hand],
       })),
     };
+  }
+
+  restartGame(): void {
+    this.gameState = null;
+    this.engine = null;
+    this.phaseConfirmations.clear();
+    this.room = {
+      ...this.room,
+      status: 'LOBBY',
+      players: this.room.players.map((p) => ({ ...p, ready: false })),
+    };
+    this.emit();
+  }
+
+  rematch(): void {
+    this.gameState = null;
+    this.engine = null;
+    this.phaseConfirmations.clear();
+    this.seed = Date.now() + Math.floor(Math.random() * 100000);
+    this.room = {
+      ...this.room,
+      status: 'LOBBY',
+      players: this.room.players.map((p) => ({ ...p, ready: true })),
+    };
+    this.emit();
+    this.startGame();
   }
 
   snapshot(): HostGameControllerSnapshot {
@@ -382,6 +408,14 @@ export class HostGameController {
         this.startGame();
         return;
       }
+      if (command.type === 'RESTART_GAME') {
+        this.restartGame();
+        return;
+      }
+      if (command.type === 'REMATCH') {
+        this.rematch();
+        return;
+      }
       throw new Error('游戏尚未开始');
     }
 
@@ -391,6 +425,12 @@ export class HostGameController {
         return;
       case 'START_GAME':
         this.startGame();
+        return;
+      case 'RESTART_GAME':
+        this.restartGame();
+        return;
+      case 'REMATCH':
+        this.rematch();
         return;
       case 'CONFIRM_IDENTITY':
         this.confirmIdentity(command.playerId);
