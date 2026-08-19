@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { getPlayerCountRules, isBud, type Card, type ClientView } from '@rose-blade/game-engine';
+import { type Card, type ClientView } from '@rose-blade/game-engine';
 import type { GameClient } from '../game/GameClient';
 import { cardLabel, factionLabel, formatPile, phaseLabel, roleLabel } from '../game/labels';
-import { RoundTable } from '../components/RoundTable';
+import { RoundTable } from '../components/game-table/RoundTable';
 
 interface GameScreenProps {
   roomId: string;
@@ -308,9 +308,8 @@ export function GameScreen({ roomId, nickname, isHost, client, debug, onExit, on
               </Panel>
             )}
 
-            <SeatMap view={view} myPlayerId={activeViewerId} />
+            <SeatMap view={view} myPlayerId={activeViewerId} currentPlayerId={client?.currentPlayerId ?? null} />
 
-            <Board view={view} myPlayerId={activeViewerId} />
 
             <ReferencePanels view={view} />
           </main>
@@ -1044,7 +1043,7 @@ function GameOverPanel({
   );
 }
 
-function SeatMap({ view, myPlayerId }: { view: ClientView; myPlayerId: string }) {
+function SeatMap({ view, myPlayerId, currentPlayerId }: { view: ClientView; myPlayerId: string; currentPlayerId: string | null }) {
   const me = view.players.find((p) => p.id === myPlayerId);
   const [collapsed, setCollapsed] = useState(false);
   if (!me || view.players.length === 0) return null;
@@ -1054,51 +1053,8 @@ function SeatMap({ view, myPlayerId }: { view: ClientView; myPlayerId: string })
       <button className="seat-map__toggle" type="button" onClick={() => setCollapsed((value) => !value)} aria-expanded={!collapsed}>
         {collapsed ? '展开座位图' : '收起座位图'}
       </button>
-      {!collapsed && <RoundTable players={view.players} myPlayerId={myPlayerId} coinHolderId={view.currentCoinHolderId} />}
+      {!collapsed && <RoundTable view={view} myPlayerId={myPlayerId} currentPlayerId={currentPlayerId} />}
     </section>
-  );
-}
-
-function Board({ view, myPlayerId }: { view: ClientView; myPlayerId: string }) {
-  const rules = getPlayerCountRules(view.players.length);
-  const sacrificeBuds = view.sacrificePile.filter(isBud).length;
-  const deathBuds = view.deathPile.filter(isBud).length;
-
-  return (
-    <div className="mt-6 grid gap-4 md:grid-cols-3">
-      <div className="rounded-lg border border-stone-700 bg-stone-900 p-4">
-        <h3 className="text-sm text-stone-400">当前状态</h3>
-        <p className="mt-2">阶段：{phaseLabel(view.phase)}</p>
-        <p>白蔷薇安全：{view.whiteRoseSafe ? '是' : '否'}</p>
-      </div>
-      <div className="rounded-lg border border-stone-700 bg-stone-900 p-4">
-        <h3 className="text-sm text-stone-400">牌堆</h3>
-        <p>献祭区：{formatPile(view.sacrificePile)}</p>
-        <p>死亡区：{formatPile(view.deathPile)}</p>
-        <p>血刃区：{formatPile(view.bladePile)}</p>
-        <div className="mt-3 border-t border-stone-700 pt-2 text-xs text-stone-400">
-          <p className="font-semibold text-stone-300">获胜条件</p>
-          <p className="mt-1">
-            白蔷薇：白蔷薇安全 + 献祭花苞 {sacrificeBuds}/{rules.sacrificeThreshold}
-            {view.whiteRoseSafe ? '' : '（还需白蔷薇安全）'}
-          </p>
-          <p>血刃：死亡花苞 {deathBuds}/{rules.deathThreshold}</p>
-          <p className="mt-1 text-stone-500">
-            {view.whiteRoseSafe
-              ? `白方还差 ${Math.max(0, rules.sacrificeThreshold - sacrificeBuds)} 张献祭花苞获胜`
-              : `白方还需先让白蔷薇安全，再凑满 ${rules.sacrificeThreshold} 张献祭花苞`}
-          </p>
-          <p className="text-stone-500">血方还差 {Math.max(0, rules.deathThreshold - deathBuds)} 张死亡花苞获胜</p>
-        </div>
-      </div>
-      <div className="rounded-lg border border-stone-700 bg-stone-900 p-4">
-        <h3 className="text-sm text-stone-400">我的区域</h3>
-        <p>身份：{roleLabel(view.me.role)}</p>
-        <p>阵营：{factionLabel(view.me.faction)}</p>
-        <p>手牌：{view.me.hand.map(cardLabel).join(', ') || '空'}</p>
-        <p>水晶：{view.me.crystal ?? '已使用'}</p>
-      </div>
-    </div>
   );
 }
 
