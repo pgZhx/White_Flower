@@ -1,8 +1,19 @@
-# 纯前端多人桌游迁移分析
+# 纯前端多人桌游迁移分析（历史记录与当前状态）
 
-> 状态：Phase 0 / Phase 1 分析文档
-> 目标：将现有 `game-engine` 最大程度复用到“朋友打开网页即可玩”的纯前端多人桌游 MVP。
-> 本文档只做分析，不包含大规模编码。
+> 原始状态：Phase 0 / Phase 1 分析文档
+> 当前状态：迁移已完成，本文保留方案演进记录；实现细节以 `docs/ARCHITECTURE.md`、`docs/FRONTEND_ARCHITECTURE.md` 和 `docs/P2P_NETWORKING.md` 为准。
+
+## 当前结论
+
+原计划中的纯前端迁移已经落地：
+
+- `packages/game-engine`：纯 TypeScript 规则引擎。
+- `packages/p2p-network`：Local、WebSocket Relay、WebRTC fallback Transport。
+- `packages/web-client`：Vite + React + TypeScript + Tailwind 静态客户端。
+- 房主浏览器运行完整 Game Engine，普通玩家只接收自己的 `ClientView`。
+- 生产默认使用 WebSocket Relay，不依赖 WebRTC 穿透。
+
+原文中“尚未实现”“建议新增 Next.js”“测试基线无法通过”等内容属于迁移前记录，不代表当前仓库状态。
 
 ## 1. 当前架构分析
 
@@ -20,7 +31,9 @@ White_Flower/
 │   ├── RULES_UNCERTAINTIES.md
 │   └── FRONTEND_MIGRATION_ANALYSIS.md  # 本文档
 └── packages/
-    └── game-engine/             # 当前唯一 package
+    ├── game-engine/             # 规则核心
+    ├── p2p-network/             # 网络传输与协议
+    └── web-client/              # Vite + React 客户端
         ├── src/
         │   ├── config/          # 人数、身份、卡牌常量
         │   ├── engine/          # GameEngine、回合、魔法、结算、视图
@@ -57,7 +70,7 @@ White_Flower/
 - `view.ts`：从完整状态投影出某个玩家的可见视图。
 - `random.ts`：随机源抽象，浏览器和 Node 都可运行。
 
-### 1.4 当前测试环境检查结论
+### 1.4 迁移前测试环境检查结论（历史）
 
 当前环境已确认：
 
@@ -66,14 +79,14 @@ White_Flower/
 
 额外发现（记录，不在本阶段修复）：
 
-- 仓库当前测试/类型检查并不能直接通过。
+- 迁移早期仓库测试/类型检查曾不能直接通过。
 - 主要原因是 `tests/*.test.ts` 从 `../src/index.js` 导入了 `createStateWithRoles`、`advanceThroughNight`、`setHand`、`playerById` 等测试辅助函数，但这些函数实际定义在 `tests/helpers.ts` 中，并未从 `src/index.ts` 导出。
-- 另外 `src/engine/magic.ts` 和 `src/engine/round.ts` 存在类型错误（`appendEvent` 调用处被推断为返回 `GameEvent[]` 但赋值给 `GameState`）。
-- 这些属于工程化/测试接线问题，不影响规则设计本身，但会影响“迁移前基线”。建议在开始前端开发前先修复，避免把不稳定的基线带到新 package。
+- 另外早期 `src/engine/magic.ts` 和 `src/engine/round.ts` 曾存在类型错误。
+- 这些属于迁移前工程化问题；当前已修复，仓库测试和类型检查可以作为开发验证命令执行。
 
 ## 2. Game Engine 是否可以直接运行在浏览器环境
 
-结论：**可以，但需要少量工程化适配。**
+结论：**可以，当前已由房主浏览器运行。**
 
 ### 2.1 可直接运行的部分
 
@@ -83,12 +96,12 @@ White_Flower/
 - 状态是普通 JSON 可序列化对象，适合通过 P2P 消息传输。
 - View Projection 已经能生成每个玩家可见的 `ClientView`，前端可以直接使用。
 
-### 2.2 需要适配的地方
+### 2.2 已落地的工程化适配
 
 1. **模块解析与构建**
    - 当前使用 `"type": "module"` 且源码内使用 `.js` 后缀相对导入。
-   - 在 Vite/Next.js 的 bundler 模式下通常可处理，但需要验证。
-   - 建议让 `game-engine` 暴露清晰的浏览器入口，并保持纯 TypeScript / 无环境依赖。
+   - Vite 已通过 workspace 验证并可正常构建。
+   - Vite 已通过 workspace 直接消费 `game-engine`，保持纯 TypeScript / 无环境依赖。
 
 2. **`events.ts` 的模块级计数器**
    - `createEvent` 使用模块级 `eventSequence` 生成事件 ID。
@@ -99,29 +112,28 @@ White_Flower/
    - 浏览器可用，但 P2P 多端同步时不要求完全一致，只作展示/日志用途即可。
 
 4. **状态所有权模型**
-   - 当前 Game Engine 是“服务器权威”设计：客户端只发送意图，引擎在服务器持有完整状态。
-   - 纯前端 P2P 需要决定谁持有权威状态、如何广播变更、如何让其他客户端只拿到自己的 View。
-   - 建议 MVP 采用“房主权威（Host Authority）”：
+   - 当前 Game Engine 使用“房主浏览器权威”设计：客户端只发送意图，房主浏览器持有完整状态。
+   - 当前采用“房主权威（Host Authority）”：
      - 房主浏览器运行完整 Game Engine。
      - 房主通过 P2P 广播公开状态/事件和每个玩家的私有 View。
      - 普通玩家只提交意图，不直接修改权威状态。
 
 5. **测试辅助函数导出**
-   - 当前测试直接从 `src/index.ts` 导入测试辅助函数，需要修复为从 `tests/helpers.ts` 导入或单独导出测试工具。
-   - 这不影响浏览器运行，但影响 CI/开发基线。
+   - 迁移早期测试曾直接从 `src/index.ts` 导入测试辅助函数；该问题已处理。
+   - 当前测试基线已恢复，后续改动应继续运行 `npm test` 与 `npm run typecheck`。
 
-## 3. 需要修改的位置
+## 3. 迁移完成的位置
 
 ### 3.1 必须修改 / 新增
 
 | 位置 | 内容 | 优先级 |
 |---|---|---|
-| `packages/game-engine/tests/*.test.ts` | 修正测试辅助函数导入路径，恢复测试基线 | 高 |
-| `packages/game-engine/src/engine/magic.ts` | 修复 `appendEvent` 相关类型错误（只改工程类型，不改规则） | 高 |
-| `packages/game-engine/src/engine/round.ts` | 同上 | 高 |
-| `packages/game-engine/package.json` | 增加 browser-friendly 的入口或构建配置（可选） | 中 |
-| `packages/web-client` | 新增 React / Next.js 前端 | 高 |
-| `packages/p2p-network` | 新增 P2P 通信层 | 高 |
+| `packages/game-engine/tests/*.test.ts` | 测试辅助函数与规则测试 | 已完成 |
+| `packages/game-engine/src/engine/magic.ts` | 魔法和行动约束 | 已完成 |
+| `packages/game-engine/src/engine/round.ts` | 回合与出牌流程 | 已完成 |
+| `packages/game-engine/package.json` | 浏览器 workspace 消费 | 已完成 |
+| `packages/web-client` | Vite + React 前端 | 已完成 |
+| `packages/p2p-network` | Relay / Local / WebRTC Transport | 已完成 |
 
 ### 3.2 建议不修改 / 尽量不动
 
@@ -132,7 +144,7 @@ White_Flower/
 
 原则：**如果前端需要更多能力，优先在 `web-client` / `p2p-network` 中包装或扩展，而不是重写 Game Engine。**
 
-## 4. 前端需要新增哪些 package
+## 4. 前端 package 现状
 
 ### 4.1 建议目录
 
@@ -140,7 +152,7 @@ White_Flower/
 packages/
 ├── game-engine/       # 保留，作为核心规则包
 ├── p2p-network/       # 新增：房间、信令抽象、WebRTC DataChannel、消息协议
-└── web-client/        # 新增：Next.js + React + TypeScript + Tailwind CSS
+└── web-client/        # Vite + React + TypeScript + Tailwind CSS
 ```
 
 ### 4.2 `p2p-network` 建议职责
@@ -167,9 +179,10 @@ packages/
 
 ### 4.4 推荐技术栈
 
-- Next.js + React + TypeScript
+- Vite + React + TypeScript
 - Tailwind CSS
-- WebRTC DataChannel（第一版可先用单浏览器模拟）
+- WebSocket Relay（生产默认）
+- WebRTC DataChannel / PeerJS（显式 fallback）
 - Vitest 继续用于单元测试
 - 不引入 Socket.IO / 数据库 / 用户系统 / 登录系统
 
@@ -225,7 +238,7 @@ type HostMessage =
 - 通过本地事件总线模拟 P2P 消息。
 - 这样先完成 UI 和 Game Engine 接入，再接真实 WebRTC。
 
-## 6. 预计开发阶段
+## 6. 历史预计开发阶段
 
 ### Phase A：基线修复（0.5–1 天）
 
@@ -235,7 +248,7 @@ type HostMessage =
 
 ### Phase B：web-client 基础（1–2 天）
 
-- 初始化 `packages/web-client`（Next.js + TS + Tailwind）。
+- 初始化 `packages/web-client`（Vite + React + TS + Tailwind）。
 - 实现首页、创建/加入房间表单。
 - 实现房间页：玩家列表、准备状态、开始游戏按钮。
 - 接入 `game-engine` 的 `createGame`、`startGame` 等 API 做本地模拟。

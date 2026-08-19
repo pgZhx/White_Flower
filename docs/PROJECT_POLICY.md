@@ -37,3 +37,15 @@
 - 当前阶段：纯前端多人桌游 MVP，优先使用静态托管 / 局域网 / P2P。
 - 后续如需信令服务器，再考虑轻量 Node 服务。
 - 详细分析见 `docs/DEPLOYMENT.md`、`docs/FRONTEND_MIGRATION_ANALYSIS.md`。
+
+## 6. 当前验证基线
+
+涉及规则、网络或前端桌面的改动，提交前执行：
+
+```bash
+npm run typecheck
+npm test
+npm run build:web
+```
+
+其中 `npm test` 覆盖 Game Engine、P2P Network 和 Web Client 测试；`build:web` 验证 Vite 静态产物可生成。

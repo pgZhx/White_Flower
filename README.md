@@ -1,6 +1,8 @@
 # Rose & Blade Online
 
-私人技术原型：5–10 人浏览器实时联机隐藏身份桌游。
+5–10 人浏览器实时联机隐藏身份桌游 MVP。
+
+当前实现采用 Vite + React 前端、浏览器房主权威 Game Engine，以及 WebSocket Relay 联机。游戏桌面使用圆桌式 UI：玩家座位环、白蔷薇/血刃状态、当前行动、金币和顶部三张手牌均在桌面内呈现。
 
 ## 环境与使用约束
 
@@ -14,11 +16,13 @@
 
 - 6 人局胜利阈值最终使用：**4 / 4**。
 
-## 第一阶段范围
+## 当前实现范围
 
 - 独立 Game Engine（TypeScript / strict）
 - 规则配置化
-- 服务器权威、隐藏信息投影
+- 浏览器房主权威、隐藏信息投影
+- WebSocket Relay 多浏览器联机
+- Vite + React 游戏桌面与响应式手牌区
 - Vitest 规则测试
 
 ## 本地命令
@@ -32,6 +36,9 @@ npm test
 
 # 类型检查
 npm run typecheck
+
+# 构建 Web 前端
+npm run build:web
 ```
 
 ## 目录
@@ -43,6 +50,9 @@ npm run typecheck
 - `docs/PROJECT_POLICY.md`：项目操作规范
 - `docs/FRONTEND_MIGRATION_ANALYSIS.md`：纯前端多人桌游迁移分析
 - `packages/game-engine`：独立游戏引擎
+- `packages/p2p-network`：Relay / Local / WebRTC Transport 与网络协议
+- `packages/web-client`：Vite + React 游戏客户端
+- `server/relay-server.mjs`：轻量 WebSocket Relay
 
 
 ## Development
@@ -142,3 +152,4 @@ http://localhost:5173/?debug=1
 - 不提供 Host Migration、账号系统、数据库、专用游戏服务器。
 - Relay 为单实例、内存房间；服务器重启会清空当前网络房间。
 - 游戏中暂不支持完整断线重连。
+- 房主调试模式 `?debug=1` 支持切换查看玩家和“一键全部确认”；该入口不会出现在正常联机 UI。

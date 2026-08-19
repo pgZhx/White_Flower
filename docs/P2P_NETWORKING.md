@@ -9,7 +9,7 @@
 - 房主浏览器是 authoritative host，持有完整 GameState 与唯一 GameEngine。
 - 普通玩家只向房主发送命令，并接收自己的 PlayerView。
 - Relay 服务器只转发网络消息，不知道角色、手牌、水晶、魔法、胜利条件，也不运行 GameEngine。
-- 生产环境不再依赖 WebRTC/STUN/TURN 跨网络穿透。
+- 生产环境默认不依赖 WebRTC/STUN/TURN 跨网络穿透；通过 WebSocket Relay 转发。
 
 ## 2. 当前生产架构
 
@@ -144,6 +144,8 @@ npm run dev:web
 ```
 
 打开 `http://localhost:5173` 即可多浏览器联机。
+
+`?debug=1` 是单浏览器调试入口，可创建模拟玩家、切换玩家视角并使用一键确认；不改变真实 Peer 的确认等待流程。
 
 ## 12. WebRTC 旧方案
 

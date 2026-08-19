@@ -1,7 +1,7 @@
 # 部署架构与环境说明
 
 > 最后更新：WebSocket Relay 生产架构
-> 旧 WebRTC/PeerJS 保留为 fallback / 调试通道。
+> 旧 WebRTC/PeerJS 保留为显式 fallback / 调试通道。
 
 ## 1. 当前环境定位
 
@@ -20,7 +20,7 @@ Nginx (80/443)
     └── /peerjs      → 127.0.0.1:9000 PeerJS fallback
 ```
 
-- GameEngine 只运行在房主浏览器。
+- GameEngine 只运行在房主浏览器，不运行在 Relay 服务端。
 - Relay 只负责消息转发，不运行游戏规则。
 - Relay 绑定 `127.0.0.1:9001`，不直接暴露公网。
 
@@ -36,6 +36,14 @@ npm run dev:web
 
 打开 `http://localhost:5173`。
 
+前端生产构建：
+
+```bash
+npm run typecheck
+npm test
+npm run build:web
+```
+
 ## 4. 一键部署
 
 ```bash
@@ -48,7 +56,7 @@ npm run dev:web
 2. 复制 `packages/web-client/dist` 到 `/var/www/white-flower`
 3. 安装 Nginx 配置
 4. 安装并启动 `white-flower-relay.service`
-5. 安装并启动旧 `white-flower-peer.service`（WebRTC fallback）
+5. 安装并启动旧 `white-flower-peer.service`（仅 WebRTC fallback）
 6. `nginx -t && systemctl reload nginx`
 
 ## 5. systemd 服务
