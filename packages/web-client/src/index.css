@@ -265,3 +265,231 @@ body {
 @keyframes rose-reference-breathe {
   50% { transform: scale(1.045); }
 }
+
+/* Luxury tabletop pass: carved wood, layered metalwork and substantial playing cards. */
+.seat-map {
+  border-color: rgba(185, 132, 55, .56);
+  border-radius: 1.35rem;
+  background:
+    radial-gradient(ellipse at 50% 40%, rgba(69, 39, 22, .28), transparent 58%),
+    linear-gradient(135deg, rgba(25, 15, 10, .98), rgba(8, 6, 5, .99));
+  box-shadow: inset 0 0 0 1px rgba(241, 196, 104, .09), inset 0 0 4rem rgba(0,0,0,.68), 0 1.5rem 3rem rgba(0,0,0,.38);
+}
+.round-table {
+  width: min(100%, 50rem);
+  aspect-ratio: 1 / 1.08;
+  margin-top: 1.65rem;
+}
+.round-table__surface {
+  top: 8%;
+  left: 7%;
+  width: 86%;
+  border: .72rem solid #29170e;
+  background:
+    radial-gradient(ellipse at 43% 30%, rgba(121, 72, 37, .62), transparent 38%),
+    repeating-radial-gradient(ellipse at 48% 50%, transparent 0 3.8rem, rgba(203, 145, 69, .13) 3.85rem 3.95rem, transparent 4rem 7rem),
+    linear-gradient(145deg, #533019, #2a170e 48%, #160b07);
+  box-shadow:
+    0 0 0 .14rem rgba(226, 168, 76, .95),
+    0 0 0 .46rem rgba(75, 40, 20, .95),
+    0 0 0 .56rem rgba(189, 132, 55, .72),
+    0 1.1rem 2rem rgba(0,0,0,.78),
+    inset 0 0 0 .12rem rgba(255, 216, 128, .62),
+    inset 0 0 3.8rem rgba(12, 5, 2, .84);
+}
+.round-table__surface::before {
+  inset: 3.2%;
+  border: 1px solid rgba(247, 201, 105, .5);
+  box-shadow: 0 0 0 .28rem rgba(77, 39, 19, .8), inset 0 0 0 .1rem rgba(244, 194, 90, .28), inset 0 0 2rem rgba(0,0,0,.24);
+}
+.round-table__surface::after {
+  content: '✦　　 ❖　　 ✦　　 ❖　　 ✦';
+  inset: 6%;
+  border: 1px solid rgba(226, 170, 76, .18);
+  color: rgba(238, 188, 92, .28);
+  font-size: clamp(.55rem, 1.2vw, .72rem);
+  letter-spacing: .55rem;
+  transform: rotate(-12deg);
+}
+.round-table__grain {
+  opacity: .43;
+  background:
+    repeating-radial-gradient(ellipse at 35% 42%, transparent 0 1.05rem, rgba(221, 160, 78, .2) 1.1rem 1.16rem, transparent 1.22rem 2.55rem),
+    linear-gradient(118deg, transparent 15%, rgba(255, 215, 125, .08) 16%, transparent 17% 42%, rgba(0,0,0,.23) 43%, transparent 44%),
+    radial-gradient(ellipse at 70% 75%, transparent 0 23%, rgba(223, 166, 79, .08) 23.2% 23.5%, transparent 24% 38%);
+  mix-blend-mode: screen;
+}
+.round-table__center {
+  inset: 11% 10%;
+  padding: 3% 0 5%;
+}
+.table-victory-hud {
+  align-items: flex-start;
+  gap: clamp(.7rem, 3vw, 2.2rem);
+  padding: .8rem clamp(.25rem, 2vw, 1.5rem);
+  border: 1px solid rgba(231, 182, 91, .16);
+  border-radius: 1rem;
+  background: linear-gradient(180deg, rgba(47, 26, 13, .28), rgba(13, 7, 4, .08));
+  box-shadow: inset 0 1px rgba(255, 218, 135, .08), 0 1rem 2rem rgba(0,0,0,.12);
+}
+.table-tracker { min-width: 0; padding: .2rem .7rem; }
+.table-tracker__eyebrow { color: #f1d18b; font-size: clamp(.7rem, 1.8vw, .9rem); font-weight: 700; text-shadow: 0 1px 2px #110703, 0 0 .8rem rgba(226, 172, 76, .22); }
+.table-tracker__count { color: #ead29c; font-size: .68rem; }
+.rose-tracker__buds, .blood-tracker__flowers { gap: .42rem; min-height: 1.35rem; margin-top: .15rem; }
+.rose-tracker__flower { height: clamp(4rem, 11vw, 6rem); margin: .1rem 0 .15rem; transform: none; }
+.blood-tracker { margin-top: 0; }
+.blood-tracker__icon { height: clamp(4rem, 10vw, 5.8rem); margin: .1rem 0 .1rem; }
+.blood-tracker__blades { margin-top: .25rem; padding: .2rem .72rem; border: 1px solid rgba(212, 153, 69, .22); border-radius: 999px; background: rgba(24, 11, 6, .46); color: #edca83; font-size: clamp(.53rem, 1.4vw, .7rem); }
+.table-turn { gap: .35rem; margin-top: .45rem; padding: .55rem 1.35rem .4rem; border-top: 1px solid rgba(226, 169, 77, .22); border-bottom: 1px solid rgba(226, 169, 77, .12); background: radial-gradient(ellipse, rgba(106, 58, 19, .28), transparent 70%); }
+.table-turn__icon { width: clamp(2.2rem, 5vw, 3rem); height: clamp(2.2rem, 5vw, 3rem); border-width: 1px; box-shadow: 0 0 .8rem rgba(237, 178, 67, .52), inset 0 0 .6rem rgba(247, 193, 75, .2); }
+.table-turn__label { color: #dbb96e; font-size: .68rem; }
+.table-turn strong { color: #ffe6a7; font-size: clamp(.85rem, 2vw, 1.05rem); text-shadow: 0 0 .6rem rgba(240, 184, 77, .35); }
+
+.seat-map > .hand-card-area {
+  position: absolute;
+  z-index: 8;
+  right: 0;
+  bottom: .7rem;
+  left: 50%;
+  width: min(92%, 26rem);
+  margin: 0;
+  padding: .72rem .85rem .8rem;
+  transform: translateX(-50%);
+  border: 1px solid rgba(218, 167, 77, .58);
+  border-radius: 1.15rem;
+  background: linear-gradient(180deg, rgba(54, 31, 17, .9), rgba(15, 8, 5, .97));
+  box-shadow: 0 .8rem 1.6rem rgba(0,0,0,.6), inset 0 1px rgba(255, 220, 142, .16), inset 0 0 1.4rem rgba(0,0,0,.48);
+}
+.hand-card-area__title { color: #f0d18b; font-size: .7rem; font-weight: 700; letter-spacing: .16em; }
+.hand-card-area__cards { gap: clamp(.45rem, 1.6vw, .8rem); margin-top: .5rem; }
+.hand-card {
+  position: relative;
+  display: flex;
+  width: clamp(5.5rem, 17vw, 7.3rem);
+  height: clamp(8rem, 23vw, 10.6rem);
+  flex-direction: column;
+  justify-content: flex-end;
+  overflow: hidden;
+  border: 1px solid #d5a95f;
+  border-radius: .72rem;
+  background: linear-gradient(145deg, #9a8060, #3f2d20 56%, #17100c);
+  box-shadow: 0 .4rem .7rem rgba(0,0,0,.65), inset 0 0 0 2px rgba(40, 24, 14, .86), inset 0 0 0 3px rgba(238, 194, 112, .16);
+  color: #f7e1aa;
+  font-size: clamp(.65rem, 1.8vw, .82rem);
+  text-align: center;
+  transition: transform .22s ease, box-shadow .22s ease;
+}
+.hand-card:hover { transform: translateY(-.55rem); box-shadow: 0 .8rem 1.1rem rgba(0,0,0,.72), 0 0 1rem rgba(226, 170, 73, .28), inset 0 0 0 2px rgba(255, 226, 155, .2); }
+.hand-card::before { inset: .3rem; border: 1px solid rgba(248, 213, 142, .45); border-radius: .45rem; background: linear-gradient(155deg, rgba(255, 227, 157, .08), transparent 34%), repeating-linear-gradient(135deg, rgba(255, 221, 145, .045) 0 1px, transparent 1px 5px); }
+.hand-card::after { content: ''; position: absolute; top: .35rem; right: .35rem; bottom: 1.95rem; left: .35rem; border-bottom: 1px solid rgba(53, 30, 17, .34); border-radius: .35rem; background: radial-gradient(ellipse at 50% 35%, rgba(248, 226, 169, .18), transparent 62%); pointer-events: none; }
+.hand-card--ghost { border-color: #a7a2b3; background: linear-gradient(145deg, #596070, #1a1c25 56%, #08090d); color: #d6d0d2; }
+.hand-card--believer { background: linear-gradient(145deg, #b9a481, #58452f 56%, #21150d); color: #fff1c8; }
+.hand-card--rose { border-color: #e6c878; background: linear-gradient(145deg, #c0a87d, #665033 56%, #27170c); color: #fff7df; }
+.hand-card--blade { border-color: #b86b52; background: linear-gradient(145deg, #692a26, #281112 56%, #0e0808); color: #f1aca0; }
+.hand-card__art { position: relative; z-index: 1; display: grid; height: 5.1rem; place-items: center; margin: 0 .4rem auto; }
+.hand-card__art .rose-icon { width: 4.25rem; height: 4.25rem; }
+.hand-card__art .blade-icon { width: 2.5rem; height: 4.4rem; }
+.hand-card__art .rose-icon--safe .rose-reference-image { animation: none; filter: drop-shadow(0 0 .3rem rgba(255,242,198,.7)); }
+.ghost-card-figure { position: relative; display: block; width: 2.45rem; height: 3.4rem; border-radius: 48% 48% 35% 35%; background: radial-gradient(circle at 50% 22%, #d0ccc1 0 17%, transparent 18%), linear-gradient(90deg, transparent 0 16%, #b0b0aa 17% 83%, transparent 84%); filter: drop-shadow(0 0 .45rem rgba(210, 214, 217, .3)); opacity: .78; }
+.ghost-card-figure::after { content: ''; position: absolute; right: -.55rem; bottom: -.05rem; left: -.55rem; height: 1.25rem; border-radius: 50% 50% 20% 20%; background: linear-gradient(180deg, #8b8b88, #24262c); }
+.hand-card__name { position: relative; z-index: 2; display: block; padding: .35rem .2rem .42rem; border-top: 1px solid rgba(45, 25, 14, .48); background: rgba(20, 11, 7, .42); font-weight: 700; letter-spacing: .08em; }
+.hand-card__seal { position: absolute; z-index: 2; right: .45rem; bottom: .38rem; color: #f1d08a; font-size: .85rem; text-shadow: 0 0 .45rem currentColor; }
+.hand-card__corner { z-index: 3; color: #4c321d; font-size: .8rem; font-weight: 700; }
+.hand-card__corner--bottom { color: #e2b96e; }
+.hand-card--empty { height: clamp(8rem, 23vw, 10.6rem); border-style: dashed; border-color: rgba(214, 163, 79, .3); background: rgba(16, 9, 5, .4); color: rgba(220, 174, 95, .35); }
+@media (max-width: 640px) {
+  .round-table { width: 108%; margin-left: -4%; }
+  .round-table__center { inset: 10% 7%; }
+  .table-victory-hud { gap: .2rem; padding-inline: .15rem; }
+  .table-tracker { padding-inline: .25rem; }
+  .hand-card-area { width: min(94%, 22rem); }
+  .hand-card { width: clamp(4.6rem, 25vw, 6rem); height: clamp(7.1rem, 36vw, 9rem); }
+  .hand-card__art { height: 4.1rem; }
+}
+
+/* No-overlap layout: reserve the top rail for the hand, keep the table and seats in separate bands. */
+.seat-map {
+  overflow: hidden;
+  padding-top: .25rem;
+}
+.seat-map > .hand-card-area {
+  top: .75rem;
+  right: auto;
+  bottom: auto;
+  left: 50%;
+  width: min(82%, 25rem);
+  min-height: 10.8rem;
+  padding: .62rem .75rem .72rem;
+  transform: translateX(-50%);
+}
+.seat-map > .round-table {
+  margin-top: 12.1rem;
+}
+.round-table {
+  width: min(100%, 50rem);
+  aspect-ratio: 1 / 1.05;
+}
+.round-table__surface {
+  top: 12%;
+  left: 11%;
+  width: 78%;
+}
+.player-seat {
+  width: clamp(3.8rem, 9.5vw, 5.15rem);
+}
+.player-seat__name {
+  max-width: 84%;
+  font-size: clamp(.58rem, 1.55vw, .78rem);
+}
+.player-seat__self, .player-seat__direction {
+  font-size: clamp(.52rem, 1.35vw, .66rem);
+}
+.player-seat__eye {
+  top: -.52rem;
+  width: 1.25rem;
+  height: .95rem;
+  font-size: .58rem;
+}
+.coin-indicator {
+  top: -.18rem;
+  right: -.18rem;
+  width: clamp(1.18rem, 3vw, 1.55rem);
+  height: clamp(1.18rem, 3vw, 1.55rem);
+}
+.hand-card {
+  width: clamp(4.8rem, 15vw, 6.6rem);
+  height: clamp(7.2rem, 20vw, 9.4rem);
+}
+.hand-card--empty { height: clamp(7.2rem, 20vw, 9.4rem); }
+.hand-card__art { height: 4.55rem; }
+.hand-card__art .rose-icon { width: 3.75rem; height: 3.75rem; }
+.hand-card__art .blade-icon { width: 2.2rem; height: 3.9rem; }
+@media (max-width: 640px) {
+  .seat-map > .hand-card-area {
+    top: .65rem;
+    width: min(80%, 20rem);
+    min-height: 8.7rem;
+    padding: .48rem .5rem .55rem;
+  }
+  .seat-map > .round-table { margin-top: 10.1rem; }
+  .round-table { width: 100%; margin-left: 0; aspect-ratio: 1 / 1.04; }
+  .round-table__surface { top: 12%; left: 10%; width: 80%; }
+  .player-seat { width: clamp(3.35rem, 15vw, 4.2rem); }
+  .player-seat__name { font-size: clamp(.5rem, 2.1vw, .66rem); }
+  .player-seat__self, .player-seat__direction { font-size: clamp(.46rem, 1.8vw, .58rem); }
+  .hand-card { width: clamp(4.1rem, 22vw, 5.35rem); height: clamp(6.25rem, 32vw, 7.8rem); }
+  .hand-card--empty { height: clamp(6.25rem, 32vw, 7.8rem); }
+  .hand-card-area__cards { gap: .35rem; }
+  .hand-card__art { height: 3.6rem; }
+  .hand-card__art .rose-icon { width: 3rem; height: 3rem; }
+  .hand-card__art .blade-icon { width: 1.75rem; height: 3rem; }
+  .hand-card__name { padding: .25rem .1rem .3rem; font-size: .6rem; }
+}
+
+/* The collapse control occupies the top-right corner; the hand rail starts below it. */
+.seat-map > .hand-card-area { top: 2.7rem; }
+.seat-map > .round-table { margin-top: 14rem; }
+@media (max-width: 640px) {
+  .seat-map > .hand-card-area { top: 2.35rem; }
+  .seat-map > .round-table { margin-top: 12rem; }
+}

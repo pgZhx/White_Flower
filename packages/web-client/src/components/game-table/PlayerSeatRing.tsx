@@ -9,7 +9,7 @@ export function PlayerSeatRing({ players, myPlayerId, coinHolderId, currentPlaye
   const meIndex = sorted.findIndex((player) => player.id === myPlayerId);
   const count = sorted.length;
   if (count === 0 || meIndex < 0) return null;
-  const radius = count >= 9 ? 39 : count >= 7 ? 38 : 37;
+  const radius = count >= 9 ? 41 : count >= 7 ? 42 : 43;
   return <div className="player-seat-ring" aria-label={`${count} 人座位`}>
     {sorted.map((player, index) => {
       const relativeIndex = (index - meIndex + count) % count;
