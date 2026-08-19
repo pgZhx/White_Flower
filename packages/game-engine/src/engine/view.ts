@@ -28,6 +28,7 @@ export interface ClientRoundView {
   crystalRevealerId: string | null;
   currentActionIndex: number;
   actionOrder: string[];
+  magic5Constraint: { earlierId: string; laterId: string } | null;
   actions: Record<string, 'PLAYED' | 'PASS'>;
   noShuffle: boolean;
   pendingMagic10: { casterId: string; targetId: string | null } | null;
@@ -106,6 +107,7 @@ const toRoundView = (round: NonNullable<GameState['round']>): ClientRoundView =>
     crystalRevealerId: round.crystalRevealerId,
     currentActionIndex: round.currentActionIndex,
     actionOrder: [...round.actionOrder],
+    magic5Constraint: round.magic5Constraint ? { ...round.magic5Constraint } : null,
     actions,
     noShuffle: round.noShuffle,
     pendingMagic10: round.pendingMagic10 ? { casterId: round.pendingMagic10.casterId, targetId: round.pendingMagic10.targetId } : null,

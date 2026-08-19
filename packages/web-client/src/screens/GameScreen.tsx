@@ -3,6 +3,7 @@ import { type Card, type ClientView } from '@rose-blade/game-engine';
 import type { GameClient } from '../game/GameClient';
 import { cardLabel, factionLabel, formatPile, phaseLabel, roleLabel } from '../game/labels';
 import { RoundTable } from '../components/game-table/RoundTable';
+import { HandCardArea } from '../components/game-table/HandCardArea';
 
 interface GameScreenProps {
   roomId: string;
@@ -192,6 +193,7 @@ export function GameScreen({ roomId, nickname, isHost, client, debug, onExit, on
     <div className="min-h-screen bg-cathedral px-4 py-6">
       <div className="mx-auto max-w-7xl">
         <Header
+          {...(debug && isHost ? { onDebugConfirmAll: confirmAll } : {})}
           roomId={roomId}
           nickname={nickname}
           isHost={isHost}
@@ -204,8 +206,8 @@ export function GameScreen({ roomId, nickname, isHost, client, debug, onExit, on
           onExit={onExit}
         />
 
-        <div className="mt-6 grid gap-6 lg:grid-cols-[300px_minmax(0,1fr)]">
-          <aside className="min-w-0 order-2 lg:order-1">
+        <div className="game-layout mt-6 grid gap-6 lg:grid-cols-[260px_minmax(0,1fr)_300px]">
+          <aside className="game-layout__history min-w-0 order-2 lg:order-1">
             <RoundHistoryPanel view={view} />
           </aside>
 
@@ -311,8 +313,11 @@ export function GameScreen({ roomId, nickname, isHost, client, debug, onExit, on
             <SeatMap view={view} myPlayerId={activeViewerId} currentPlayerId={client?.currentPlayerId ?? null} />
 
 
-            <ReferencePanels view={view} />
           </main>
+
+          <aside className="game-layout__magic min-w-0 order-3">
+            <ReferencePanels view={view} />
+          </aside>
         </div>
       </div>
     </div>
@@ -330,6 +335,7 @@ function Header({
   onViewAs,
   debug,
   onExit,
+  onDebugConfirmAll,
 }: {
   roomId: string;
   nickname: string;
@@ -341,6 +347,7 @@ function Header({
   onViewAs: (id: string) => void;
   debug: boolean;
   onExit: () => void;
+  onDebugConfirmAll?: () => void;
 }) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-2">
@@ -363,6 +370,11 @@ function Header({
               </option>
             ))}
           </select>
+        )}
+        {onDebugConfirmAll && (
+          <button onClick={onDebugConfirmAll} className="rounded border border-amber-700/70 bg-amber-950/50 px-2 py-1 text-xs text-amber-200 hover:bg-amber-900/70">
+            调试：一键全部确认
+          </button>
         )}
         <button onClick={onExit} className="text-sm text-stone-400 hover:text-stone-100">
           退出
@@ -519,51 +531,26 @@ function MagicNotice({ view }: { view: ClientView }) {
 }
 
 function ReferencePanels({ view }: { view: ClientView }) {
-  const hasNightInfo = (view.me.nightRecognition?.length ?? 0) > 0;
   const [magicOpen, setMagicOpen] = useState(false);
   return (
-    <div className="mt-6 grid gap-4 lg:grid-cols-3">
-      {hasNightInfo && (
-        <div className="rounded-lg border border-stone-700 bg-stone-900 p-4">
-          <h3 className="text-sm font-semibold text-rose">夜间相认信息</h3>
-          <p className="mt-2 text-xs text-stone-400">你睁眼时看到的玩家：</p>
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {view.me.nightRecognition?.map((id) => {
-              const p = view.players.find((x) => x.id === id);
-              return (
-                <span key={id} className="rounded border border-stone-600 bg-stone-800 px-2 py-1 text-xs">
-                  {p?.nickname ?? id}
-                </span>
-              );
-            })}
-          </div>
-          <p className="mt-2 text-[11px] text-stone-500">仅你知道这些玩家参与了夜间相认，不知道具体身份。</p>
+    <div className="magic-book-panel rounded-lg border border-stone-700 bg-stone-900 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <h3 className="text-sm font-semibold text-rose">魔法之书</h3>
+          <button className="rounded border border-stone-600 px-2 py-0.5 text-xs text-stone-300 hover:bg-stone-700" onClick={() => setMagicOpen((open) => !open)}>
+            {magicOpen ? '收起' : '展开'}
+          </button>
         </div>
-      )}
-      <div className={`rounded-lg border border-stone-700 bg-stone-900 p-4 ${hasNightInfo ? 'lg:col-span-2' : 'lg:col-span-3'}`}>
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <h3 className="text-sm font-semibold text-rose">魔法之书</h3>
-            <button
-              className="rounded border border-stone-600 px-2 py-0.5 text-xs text-stone-300 hover:bg-stone-700"
-              onClick={() => setMagicOpen((open) => !open)}
-            >
-              {magicOpen ? '收起' : '展开'}
-            </button>
-          </div>
-          <span className="text-xs text-stone-400">
-            你的水晶：{view.me.crystal !== null ? <span className="text-rose">{view.me.crystal}</span> : '已使用'}
-          </span>
-        </div>
-        {magicOpen && (
-        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        <span className="text-xs text-stone-400">
+          水晶：{view.me.crystal !== null ? <span className="text-rose">{view.me.crystal}</span> : '已使用'}
+        </span>
+      </div>
+      {magicOpen && (
+        <div className="mt-3 grid gap-2">
           {magicBook.map((magic) => {
             const isMine = view.me.crystal === magic.id;
             return (
-              <div
-                key={magic.id}
-                className={`rounded border p-2 ${isMine ? 'border-rose bg-rose/10' : 'border-stone-800 bg-stone-950'}`}
-              >
+              <div key={magic.id} className={`rounded border p-2 ${isMine ? 'border-rose bg-rose/10' : 'border-stone-800 bg-stone-950'}`}>
                 <p className="text-sm font-semibold text-stone-200">
                   {magic.id}. {magic.name}
                   {isMine && <span className="ml-1 text-xs text-rose">（你的水晶）</span>}
@@ -573,8 +560,7 @@ function ReferencePanels({ view }: { view: ClientView }) {
             );
           })}
         </div>
-        )}
-      </div>
+      )}
     </div>
   );
 }
@@ -634,7 +620,7 @@ function NightPanel({ view, onContinue }: { view: ClientView; onContinue: () => 
     <div className="mt-6 rounded-lg border border-stone-700 bg-stone-900 p-6">
       <h2 className="text-xl font-serif text-rose">夜间信息</h2>
       {view.me.nightRecognition ? (
-        <p className="mt-2 text-sm text-stone-400">界面最下方“夜间相认信息”会一直保留，方便你随时查看。</p>
+        <p className="mt-2 text-sm text-stone-400">你看见过的玩家会在圆桌座位上显示眼睛标记。</p>
       ) : (
         <p className="mt-2 text-stone-400">你没有获得额外夜间信息。</p>
       )}
@@ -661,7 +647,7 @@ function CoinPhasePanel({
   onSelect: (targetId: string) => void;
 }) {
   const isActive = view.currentCoinHolderId === activePlayerId;
-  const targets = view.players.filter((p) => p.hasCrystal);
+  const targets = view.players.filter((p) => p.hasCrystal && p.id !== activePlayerId);
   return (
     <Panel title="水晶阶段">
       {isActive ? (
@@ -783,6 +769,12 @@ function ActionPanel({
   const [selectedCard, setSelectedCard] = useState<Card | null>(null);
   const canPass = client.canPass(activePlayerId);
   const randomForced = client.isRandomForced(activePlayerId);
+  const magic5Constraint = view.round?.magic5Constraint;
+  const magic5EarlierAction = magic5Constraint?.laterId === activePlayerId
+    ? view.round?.actions[magic5Constraint.earlierId]
+    : undefined;
+  const magic5MustPass = magic5EarlierAction === 'PASS';
+  const magic5MustPlay = magic5EarlierAction === 'PLAYED';
 
   if (!isMyTurn) {
     const current = view.players.find((p) => p.id === currentPlayerId);
@@ -805,9 +797,9 @@ function ActionPanel({
   return (
     <Panel title="你的行动">
       <p className="text-stone-300">
-        {randomForced ? '你被魔法强制随机出牌。' : canPass ? '请出牌或跳过。' : '你被强制要求出牌。'}
+        {randomForced ? '你被魔法强制随机出牌。' : magic5MustPass ? '行动联动：第一位玩家弃牌，你必须跟随弃牌。' : magic5MustPlay ? '行动联动：第一位玩家出牌，你必须跟随出牌。' : canPass ? '请出牌或跳过。' : '你被强制要求出牌。'}
       </p>
-      {!randomForced && (
+      {!randomForced && !magic5MustPass && (
         <div className="mt-3 flex flex-wrap gap-2">
           {view.me.hand.map((card, i) => (
             <button
@@ -823,12 +815,12 @@ function ActionPanel({
       <div className="mt-4 flex gap-2">
         <button
           className="rounded bg-blood px-4 py-2 font-semibold text-white hover:bg-red-800 disabled:opacity-40"
-          disabled={!randomForced && !selectedCard}
+          disabled={!randomForced && !magic5MustPass && !selectedCard}
           onClick={play}
         >
           {randomForced ? '随机出牌' : '确认出牌'}
         </button>
-        {canPass && (
+        {(canPass && !magic5MustPlay) && (
           <button
             className="rounded border border-stone-600 px-4 py-2 text-stone-300 hover:bg-stone-700"
             onClick={() => client.handleCommand({ type: 'PASS', playerId: activePlayerId })}
@@ -1053,7 +1045,10 @@ function SeatMap({ view, myPlayerId, currentPlayerId }: { view: ClientView; myPl
       <button className="seat-map__toggle" type="button" onClick={() => setCollapsed((value) => !value)} aria-expanded={!collapsed}>
         {collapsed ? '展开座位图' : '收起座位图'}
       </button>
-      {!collapsed && <RoundTable view={view} myPlayerId={myPlayerId} currentPlayerId={currentPlayerId} />}
+      {!collapsed && <>
+        <HandCardArea cards={view.me.hand} />
+        <RoundTable view={view} myPlayerId={myPlayerId} currentPlayerId={currentPlayerId} />
+      </>}
     </section>
   );
 }

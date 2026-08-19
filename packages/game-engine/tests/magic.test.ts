@@ -156,6 +156,14 @@ describe('Magic 5', () => {
     state = submitAction(state, 'p1', 'PASS', null, random);
     expect(() => submitAction(state, 'p2', 'PLAY', 'BELIEVER', random)).toThrow();
   });
+
+  it('forces the later player to play when the earlier player played', () => {
+    let state = baseMagicState(['WHITE_ROSE', 'BISHOP', 'BELIEVER', 'DOUBLE_KNIFE', 'DARK_KNIFE'], 5);
+    state = resolveCurrentMagic(state, ['p2', 'p1'], random);
+    state = submitAction(state, 'p0', 'PASS', null, random);
+    state = submitAction(state, 'p1', 'PLAY', 'BELIEVER', random);
+    expect(() => submitAction(state, 'p2', 'PASS', null, random)).toThrow();
+  });
 });
 
 describe('Magic 6', () => {
