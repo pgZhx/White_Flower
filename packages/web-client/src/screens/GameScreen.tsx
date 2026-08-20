@@ -4,6 +4,8 @@ import type { GameClient } from '../game/GameClient';
 import { cardLabel, factionLabel, formatPile, phaseLabel, roleLabel } from '../game/labels';
 import { RoundTable } from '../components/game-table/RoundTable';
 import { HandCardArea } from '../components/game-table/HandCardArea';
+import { VoicePanel } from '../components/voice/VoicePanel';
+import type { VoiceController } from '../voice/VoiceController';
 
 interface GameScreenProps {
   roomId: string;
@@ -15,6 +17,7 @@ interface GameScreenProps {
   onExit: () => void;
   onBackToRoom: () => void;
   onRematch: () => void;
+  voiceController: VoiceController | null;
 }
 
 const magicNames: Record<number, string> = {
@@ -151,7 +154,7 @@ function getCurrentMagicResolvedEvent(view: ClientView): { payload: Record<strin
   return null;
 }
 
-export function GameScreen({ roomId, nickname, isHost, client, debug, onExit, onBackToRoom, onRematch }: GameScreenProps) {
+export function GameScreen({ roomId, nickname, isHost, client, debug, onExit, onBackToRoom, onRematch, voiceController }: GameScreenProps) {
   const [, setTick] = useState(0);
   const [viewAs, setViewAs] = useState<string | null>(null);
 
@@ -212,6 +215,13 @@ export function GameScreen({ roomId, nickname, isHost, client, debug, onExit, on
           </aside>
 
           <main className="min-w-0 order-1 lg:order-2">
+            <VoicePanel
+              controller={voiceController}
+              view={view}
+              players={view.players}
+              onEndSpeaking={() => client.handleCommand({ type: 'END_SPEAKING', playerId: activeViewerId })}
+              onSelectSpeakingOrder={(firstPlayerId, direction) => client.handleCommand({ type: 'SELECT_SPEAKING_ORDER', playerId: activeViewerId, firstPlayerId, direction })}
+            />
             <MagicNotice view={view} />
 
             {phase === 'NIGHT_RECOGNITION' && (
@@ -222,7 +232,7 @@ export function GameScreen({ roomId, nickname, isHost, client, debug, onExit, on
               <NightPanel view={view} onContinue={confirmIdentity} />
             )}
 
-            {phase === 'ROUND_MAGIC_SELECT' && (
+            {(phase === 'ROUND_MAGIC_SELECT' || phase === 'INITIAL_COIN_PHASE') && (
               <CoinPhasePanel
                 view={view}
                 activePlayerId={activeViewerId}

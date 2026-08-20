@@ -17,6 +17,9 @@ import { HostGameClient } from './game/HostGameClient';
 import { PeerGameClient } from './game/PeerGameClient';
 import { NetworkHost } from './network/NetworkHost';
 import { NetworkPeer } from './network/NetworkPeer';
+import { VoiceManager } from './voice/VoiceManager';
+import { VoiceRoom } from './voice/VoiceRoom';
+import { VoiceController } from './voice/VoiceController';
 import type { GameClient } from './game/GameClient';
 import {
   clearRoomSession,
@@ -244,8 +247,11 @@ export default function App() {
   const [initialRoom, setInitialRoom] = useState<string | null>(null);
   const [roomParamReady, setRoomParamReady] = useState(false);
   const [client, setClient] = useState<GameClient | null>(null);
+  const [voiceController, setVoiceController] = useState<VoiceController | null>(null);
   const debugMode = useMemo(isDebugMode, []);
   const reconnectingRef = useRef(false);
+  const voiceRoomRef = useRef<VoiceRoom | null>(null);
+  const voiceControllerRef = useRef<VoiceController | null>(null);
 
   useEffect(() => {
     setInitialRoom(readRoomParam());
@@ -254,7 +260,26 @@ export default function App() {
 
   useEffect(() => {
     if (!client) return;
-    return client.subscribe(() => {
+    const manager = new VoiceManager();
+    const controller = new VoiceController(client.playerId ?? '', manager, client.getVoiceSignaling());
+    voiceControllerRef.current = controller;
+    setVoiceController(controller);
+    let disposed = false;
+    const ensureVoiceRoom = () => {
+      if (disposed) return;
+      if (!manager.hasPermission || voiceRoomRef.current) return;
+      const room = new VoiceRoom(controller.playerId, manager, client.getVoiceSignaling());
+      voiceRoomRef.current = room;
+      const view = client.getView(client.playerId ?? undefined);
+      room.updateParticipants((view?.players ?? client.players).map((player) => player.id));
+    };
+    const unsubscribeVoice = controller.subscribe(ensureVoiceRoom);
+    void controller.requestPermission().then(ensureVoiceRoom);
+    controller.sync(client.getView(client.playerId ?? undefined));
+    const unsubscribe = client.subscribe(() => {
+      const view = client.getView(client.playerId ?? undefined);
+      controller.sync(view);
+      voiceRoomRef.current?.updateParticipants((view?.players ?? client.players).map((player) => player.id));
       if (client instanceof HostGameClient) {
         const saved = loadHostSession(client.roomId);
         if (saved) {
@@ -269,8 +294,8 @@ export default function App() {
           });
         }, 800);
       }
-      const view = client.getView();
-      if (view && view.phase !== 'LOBBY' && view.phase !== 'SETUP') {
+      const currentView = client.getView();
+      if (currentView && currentView.phase !== 'LOBBY' && currentView.phase !== 'SETUP') {
         setScreen((prev) => {
           if (prev.name === 'lobby' || prev.name === 'connecting') {
             return {
@@ -285,6 +310,19 @@ export default function App() {
         });
       }
     });
+    return () => {
+      disposed = true;
+      unsubscribe();
+      unsubscribeVoice();
+    };
+  }, [client]);
+
+  useEffect(() => () => {
+    voiceRoomRef.current?.destroy();
+    voiceRoomRef.current = null;
+    voiceControllerRef.current?.destroy();
+    voiceControllerRef.current = null;
+    setVoiceController(null);
   }, [client]);
 
   const handleCreate = async (nickname: string) => {
@@ -518,6 +556,7 @@ export default function App() {
         debug={debugMode}
         onStart={handleStart}
         onLeave={handleLeave}
+        voiceController={voiceController}
       />
     );
   }
@@ -533,6 +572,7 @@ export default function App() {
       onExit={handleLeave}
       onBackToRoom={handleBackToRoom}
       onRematch={handleRematch}
+      voiceController={voiceController}
     />
   );
 }

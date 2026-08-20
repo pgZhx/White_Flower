@@ -5,10 +5,11 @@ import { appendEvent, appendStateEvent, createEvent } from '../events.js';
 import { getLeftNeighborId, getPlayer, getRightNeighborId, resolveMagicNow, applyMagic10, hasLegalTargets, magicRequiresTargetInput } from './magic.js';
 import { createInitialRound } from './night.js';
 import { allPlayersUsedCrystal, evaluateFinalCrystal, evaluateRoundResolution } from './victory.js';
+import { buildSpeakingOrder, createVoiceState } from './voice.js';
 
 export const selectCoinTarget = (state: GameState, targetId: string): GameState => {
-  if (state.phase !== 'ROUND_MAGIC_SELECT') {
-    throw new InvalidPhaseError('ROUND_MAGIC_SELECT', state.phase);
+  if (state.phase !== 'ROUND_MAGIC_SELECT' && state.phase !== 'INITIAL_COIN_PHASE') {
+    throw new InvalidPhaseError('INITIAL_COIN_PHASE or ROUND_MAGIC_SELECT', state.phase);
   }
   if (!state.round) {
     throw new Error('No active round');
@@ -47,6 +48,7 @@ export const selectCoinTarget = (state: GameState, targetId: string): GameState 
     players: nextPlayers,
     currentCoinHolderId: targetId,
     publicCrystalHistory: nextHistory,
+    voice: createVoiceState('MUTED'),
     round: nextRound,
     version: state.version + 1,
   };
@@ -126,6 +128,7 @@ export const startPlayerActions = (state: GameState): GameState => {
     ...state,
     phase: 'PLAYER_ACTIONS',
     round: nextRound,
+    voice: createVoiceState('MUTED'),
     version: state.version + 1,
   };
 };
@@ -450,6 +453,133 @@ export const resolveRound = (state: GameState): GameState => {
   };
 };
 
+const SPEAKING_PHASES: readonly GameState['phase'][] = [
+  'FIRST_SPEAKING_PHASE',
+  'ROUND_SPEAKING_PHASE',
+  'COIN_OWNER_SUMMARY_PHASE',
+];
+
+const isSpeakingPhase = (phase: GameState['phase']): boolean => SPEAKING_PHASES.includes(phase);
+
+export const selectSpeakingOrder = (
+  state: GameState,
+  selectorId: string,
+  firstPlayerId: string,
+  direction: 'CLOCKWISE' | 'COUNTERCLOCKWISE',
+): GameState => {
+  if (state.phase !== 'ROUND_SPEAKING_PHASE') {
+    throw new InvalidPhaseError('ROUND_SPEAKING_PHASE', state.phase);
+  }
+  if (state.currentCoinHolderId !== selectorId) {
+    throw new NotYourTurnError('Only the current coin holder can select the speaking order');
+  }
+
+  const speakerOrder = buildSpeakingOrder(state, firstPlayerId, direction);
+  let next: GameState = {
+    ...state,
+    voice: createVoiceState('TURN_BASED', speakerOrder[0] ?? null, speakerOrder),
+    version: state.version + 1,
+  };
+  next = appendStateEvent(next, createEvent('SPEAKER_ORDER_SELECTED', {
+    selectorId,
+    firstPlayerId,
+    direction,
+    speakerOrder,
+  }));
+  if (speakerOrder[0]) {
+    next = appendStateEvent(next, createEvent('SPEAKING_STARTED', {
+      playerId: speakerOrder[0],
+      phase: state.phase,
+      remainingSeconds: 60,
+    }));
+  }
+  return next;
+};
+
+export const endSpeaking = (state: GameState, playerId: string): GameState => {
+  if (!isSpeakingPhase(state.phase)) {
+    throw new InvalidPhaseError('a speaking phase', state.phase);
+  }
+  if (state.voice.currentSpeakerId !== playerId) {
+    throw new NotYourTurnError('Only the current speaker can end speaking');
+  }
+
+  const nextIndex = state.voice.speakerIndex + 1;
+  let next: GameState = appendStateEvent(state, createEvent('SPEAKING_FINISHED', {
+    playerId,
+    phase: state.phase,
+  }));
+
+  if (nextIndex < state.voice.speakerOrder.length) {
+    const nextSpeakerId = state.voice.speakerOrder[nextIndex] as string;
+    next = {
+      ...next,
+      voice: {
+        ...state.voice,
+        speakerIndex: nextIndex,
+        currentSpeakerId: nextSpeakerId,
+        remainingSeconds: 60,
+      },
+      version: state.version + 1,
+    };
+    return appendStateEvent(next, createEvent('SPEAKING_STARTED', {
+      playerId: nextSpeakerId,
+      phase: state.phase,
+      remainingSeconds: 60,
+    }));
+  }
+
+  if (state.phase === 'FIRST_SPEAKING_PHASE') {
+    return {
+      ...next,
+      phase: 'INITIAL_COIN_PHASE',
+      voice: createVoiceState('MUTED'),
+      version: state.version + 1,
+    };
+  }
+
+  if (state.phase === 'ROUND_SPEAKING_PHASE') {
+    const summarySpeakerId = state.currentCoinHolderId;
+    return {
+      ...next,
+      phase: 'COIN_OWNER_SUMMARY_PHASE',
+      voice: createVoiceState('TURN_BASED', summarySpeakerId, summarySpeakerId ? [summarySpeakerId] : []),
+      version: state.version + 1,
+    };
+  }
+
+  const nextRoundNumber = state.roundNumber + 1;
+  const nextCoinHolderId = state.currentCoinHolderId ?? state.players[0]?.id ?? null;
+  const completedRoundEvents = appendEvent(
+    next.eventLog,
+    createEvent('ROUND_FINISHED', { roundNumber: state.roundNumber }),
+  );
+  return {
+    ...next,
+    phase: 'ROUND_MAGIC_SELECT',
+    roundNumber: nextRoundNumber,
+    currentCoinHolderId: nextCoinHolderId,
+    round: createInitialRound(nextRoundNumber, nextCoinHolderId),
+    voice: createVoiceState('MUTED'),
+    eventLog: completedRoundEvents,
+    version: state.version + 1,
+  };
+};
+
+export const tickSpeaking = (state: GameState): GameState => {
+  if (!isSpeakingPhase(state.phase) || !state.voice.currentSpeakerId) {
+    throw new InvalidActionError('There is no active speaker');
+  }
+  if (state.voice.remainingSeconds > 1) {
+    return {
+      ...state,
+      voice: { ...state.voice, remainingSeconds: state.voice.remainingSeconds - 1 },
+      version: state.version + 1,
+    };
+  }
+  return endSpeaking(state, state.voice.currentSpeakerId);
+};
+
 export const checkVictoryAndAdvance = (state: GameState): GameState => {
   if (state.phase !== 'CHECK_VICTORY') {
     throw new InvalidPhaseError('CHECK_VICTORY', state.phase);
@@ -490,17 +620,12 @@ export const checkVictoryAndAdvance = (state: GameState): GameState => {
     };
   }
 
-  const previousRevealerId = state.round.crystalRevealerId;
-  const nextRoundNumber = state.roundNumber + 1;
-  const nextCoinHolderId = previousRevealerId ?? state.players[0]?.id ?? null;
-  const events = appendEvent(state.eventLog, createEvent('ROUND_FINISHED', { roundNumber: state.roundNumber }));
+  const events = appendEvent(state.eventLog, createEvent('ROUND_SPEAKING_STARTED', { roundNumber: state.roundNumber }));
 
   return {
     ...state,
-    phase: 'ROUND_MAGIC_SELECT',
-    roundNumber: nextRoundNumber,
-    currentCoinHolderId: nextCoinHolderId,
-    round: createInitialRound(nextRoundNumber, nextCoinHolderId),
+    phase: 'ROUND_SPEAKING_PHASE',
+    voice: createVoiceState('TURN_BASED'),
     eventLog: events,
     version: state.version + 1,
   };

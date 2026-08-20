@@ -10,4 +10,5 @@ export * from './engine/magic.js';
 export * from './engine/round.js';
 export * from './engine/victory.js';
 export * from './engine/view.js';
+export * from './engine/voice.js';
 export * from './engine/GameEngine.js';

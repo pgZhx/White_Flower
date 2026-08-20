@@ -3,6 +3,7 @@ import type { RoomPlayer, RoomState } from '@rose-blade/p2p-network';
 import { NetworkPeer, type PeerCommand } from '../network/NetworkPeer';
 import type { GameClient, GameOverSnapshot, PendingMagic10View } from './GameClient';
 import type { GameCommand } from './HostGameController';
+import type { VoiceSignaling } from '../voice/VoiceRoom';
 
 const JOIN_TIMEOUT_MS = 12000;
 
@@ -132,6 +133,10 @@ export class PeerGameClient implements GameClient {
         hand: p.hand ?? [],
       })),
     };
+  }
+
+  getVoiceSignaling(): VoiceSignaling {
+    return this.networkPeer;
   }
 
   async reconnect(): Promise<void> {

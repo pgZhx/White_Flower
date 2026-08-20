@@ -22,6 +22,8 @@ export type GameCommand =
   | { type: 'START_GAME'; playerId: string }
   | { type: 'CONFIRM_IDENTITY'; playerId: string }
   | { type: 'SELECT_COIN_TARGET'; playerId: string; targetId: string }
+  | { type: 'SELECT_SPEAKING_ORDER'; playerId: string; firstPlayerId: string; direction: 'CLOCKWISE' | 'COUNTERCLOCKWISE' }
+  | { type: 'END_SPEAKING'; playerId: string }
   | {
       type: 'RESOLVE_MAGIC';
       playerId: string;
@@ -64,6 +66,7 @@ export class HostGameController {
   private engine: GameEngine | null = null;
   private phaseConfirmations = new Map<string, Set<string>>();
   private rematchPlayerIds = new Set<string>();
+  private voiceTimer: ReturnType<typeof setInterval> | null = null;
   private listeners = new Set<() => void>();
 
   constructor(options: HostGameControllerOptions) {
@@ -86,6 +89,7 @@ export class HostGameController {
   }
 
   private emit(): void {
+    this.syncVoiceTimer();
     for (const listener of this.listeners) {
       listener();
     }
@@ -93,6 +97,14 @@ export class HostGameController {
 
   notifyExternalChange(): void {
     this.emit();
+  }
+
+  destroy(): void {
+    if (this.voiceTimer) {
+      clearInterval(this.voiceTimer);
+      this.voiceTimer = null;
+    }
+    this.listeners.clear();
   }
 
   addPlayer(nickname: string, playerId?: string): RoomPlayer {
@@ -128,6 +140,7 @@ export class HostGameController {
         p.id === playerId ? { ...p, connected } : p,
       ),
     };
+    this.skipDisconnectedSpeaker();
     this.tryStartRematch();
     this.emit();
   }
@@ -240,6 +253,43 @@ export class HostGameController {
     }
     this.gameState = this.engine.getState();
     this.phaseConfirmations.delete(phase);
+  }
+
+  private syncVoiceTimer(): void {
+    const timed = this.gameState?.phase === 'FIRST_SPEAKING_PHASE'
+      || this.gameState?.phase === 'ROUND_SPEAKING_PHASE'
+      || this.gameState?.phase === 'COIN_OWNER_SUMMARY_PHASE';
+    if (timed && !this.voiceTimer) {
+      this.voiceTimer = setInterval(() => this.tickVoice(), 1000);
+    } else if (!timed && this.voiceTimer) {
+      clearInterval(this.voiceTimer);
+      this.voiceTimer = null;
+    }
+  }
+
+  private tickVoice(): void {
+    if (!this.engine || !this.gameState) return;
+    try {
+      this.engine.tickSpeaking();
+      this.gameState = this.engine.getState();
+      this.emit();
+    } catch {
+      this.syncVoiceTimer();
+    }
+  }
+
+  private skipDisconnectedSpeaker(): void {
+    if (!this.engine || !this.gameState) return;
+    const currentSpeakerId = this.gameState.voice.currentSpeakerId;
+    if (!currentSpeakerId) return;
+    const currentPlayer = this.room.players.find((player) => player.id === currentSpeakerId);
+    if (currentPlayer?.connected !== false) return;
+    try {
+      this.engine.endSpeaking(currentSpeakerId);
+      this.gameState = this.engine.getState();
+    } catch {
+      // A simultaneous phase transition is resolved by the next state update.
+    }
   }
 
   getView(playerId: string): ClientView | null {
@@ -444,6 +494,7 @@ export class HostGameController {
       snapshot.phaseConfirmations.map((entry) => [entry.phase, new Set(entry.playerIds)]),
     );
     controller.rematchPlayerIds = new Set(snapshot.rematchPlayerIds ?? []);
+    controller.syncVoiceTimer();
     return controller;
   }
 
@@ -486,6 +537,12 @@ export class HostGameController {
         return;
       case 'SELECT_COIN_TARGET':
         this.engine.selectCoinTarget(command.targetId);
+        break;
+      case 'SELECT_SPEAKING_ORDER':
+        this.engine.selectSpeakingOrder(command.playerId, command.firstPlayerId, command.direction);
+        break;
+      case 'END_SPEAKING':
+        this.engine.endSpeaking(command.playerId);
         break;
       case 'RESOLVE_MAGIC':
         this.engine.resolveMagic(command.targetIds, new SeededRandom(this.seed + this.gameState.roundNumber), command.magic6Choice);

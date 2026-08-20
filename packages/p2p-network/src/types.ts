@@ -13,6 +13,8 @@ export type NetworkMessageType =
   | 'PLAYER_VIEW'
   | 'PUBLIC_EVENT'
   | 'HOST_ERROR'
+  | 'VOICE_SIGNAL'
+  | 'VOICE_STATUS'
   | 'HOST_DISCONNECTED'
   | 'PING';
 
@@ -80,6 +82,23 @@ export interface HostErrorMessage extends NetworkMessageBase {
   payload: { code: string; message: string };
 }
 
+export interface VoiceSignalMessage extends NetworkMessageBase {
+  type: 'VOICE_SIGNAL';
+  payload: {
+    fromPlayerId: string;
+    toPlayerId: string;
+    signal: unknown;
+  };
+}
+
+export interface VoiceStatusMessage extends NetworkMessageBase {
+  type: 'VOICE_STATUS';
+  payload: {
+    playerId: string;
+    enabled: boolean;
+  };
+}
+
 export interface HostDisconnectedMessage extends NetworkMessageBase {
   type: 'HOST_DISCONNECTED';
   payload: { message: string };
@@ -101,6 +120,8 @@ export type NetworkMessage =
   | PlayerViewMessage
   | PublicEventMessage
   | HostErrorMessage
+  | VoiceSignalMessage
+  | VoiceStatusMessage
   | HostDisconnectedMessage
   | PingMessage;
 

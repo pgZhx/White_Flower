@@ -3,6 +3,7 @@ import type { RoomPlayer, RoomState } from '@rose-blade/p2p-network';
 import { HostGameController, type GameCommand } from './HostGameController';
 import type { NetworkHost } from '../network/NetworkHost';
 import type { GameClient, GameOverSnapshot, PendingMagic10View } from './GameClient';
+import type { VoiceSignaling } from '../voice/VoiceRoom';
 
 export class HostGameClient implements GameClient {
   readonly isHost = true;
@@ -105,6 +106,10 @@ export class HostGameClient implements GameClient {
     };
   }
 
+  getVoiceSignaling(): VoiceSignaling {
+    return this.networkHost;
+  }
+
   get lastError(): string | null {
     return this.transportLost ? '网络连接已断开，正在尝试重连…' : null;
   }
@@ -118,6 +123,7 @@ export class HostGameClient implements GameClient {
 
   disconnect(): void {
     this.networkHost.destroy();
+    this.controller.destroy();
     this.transport.disconnect();
   }
 }

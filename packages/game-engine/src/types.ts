@@ -15,6 +15,8 @@ export type GamePhase =
   | 'SETUP'
   | 'NIGHT_RECOGNITION'
   | 'NIGHT_DOUBLE_KNIFE'
+  | 'FIRST_SPEAKING_PHASE'
+  | 'INITIAL_COIN_PHASE'
   | 'ROUND_MAGIC_SELECT'
   | 'MAGIC_RESOLUTION'
   | 'PLAYER_ACTIONS'
@@ -22,7 +24,21 @@ export type GamePhase =
   | 'ROUND_REVEAL'
   | 'ROUND_RESOLUTION'
   | 'CHECK_VICTORY'
+  | 'ROUND_SPEAKING_PHASE'
+  | 'COIN_OWNER_SUMMARY_PHASE'
   | 'GAME_OVER';
+
+export type VoiceMode = 'FREE_CHAT' | 'TURN_BASED' | 'MUTED';
+export type SpeakingDirection = 'CLOCKWISE' | 'COUNTERCLOCKWISE';
+
+export interface VoiceState {
+  enabled: boolean;
+  mode: VoiceMode;
+  currentSpeakerId: string | null;
+  speakerOrder: string[];
+  speakerIndex: number;
+  remainingSeconds: number;
+}
 
 export type MagicId = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12;
 
@@ -48,6 +64,10 @@ export type GameEventType =
   | 'WHITE_ROSE_SAFE'
   | 'WHITE_ROSE_KILLED'
   | 'ROUND_FINISHED'
+  | 'SPEAKER_ORDER_SELECTED'
+  | 'SPEAKING_STARTED'
+  | 'SPEAKING_FINISHED'
+  | 'ROUND_SPEAKING_STARTED'
   | 'GAME_FINISHED';
 
 export interface GameEvent {
@@ -189,6 +209,7 @@ export interface GameState {
   winner: Faction | null;
   winReason: string | null;
   round: RoundState | null;
+  voice: VoiceState;
   eventLog: GameEvent[];
   version: number;
 }

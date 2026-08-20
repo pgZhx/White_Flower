@@ -7,6 +7,9 @@ import {
   submitAction,
   submitMagic10Target,
   submitMagic10Replacement,
+  selectSpeakingOrder,
+  endSpeaking,
+  tickSpeaking,
   revealRound,
   resolveRound,
   checkVictoryAndAdvance,
@@ -58,6 +61,18 @@ export class GameEngine {
 
   submitMagic10Replacement(targetId: string, replacementCard: Card): void {
     this.state = submitMagic10Replacement(this.state, targetId, replacementCard);
+  }
+
+  selectSpeakingOrder(selectorId: string, firstPlayerId: string, direction: 'CLOCKWISE' | 'COUNTERCLOCKWISE'): void {
+    this.state = selectSpeakingOrder(this.state, selectorId, firstPlayerId, direction);
+  }
+
+  endSpeaking(playerId: string): void {
+    this.state = endSpeaking(this.state, playerId);
+  }
+
+  tickSpeaking(): void {
+    this.state = tickSpeaking(this.state);
   }
 
   revealRound(random: RandomProvider): void {

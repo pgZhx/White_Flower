@@ -29,6 +29,8 @@ const PHASE_LABELS: Record<GamePhase, string> = {
   SETUP: '准备中',
   NIGHT_RECOGNITION: '夜间相认',
   NIGHT_DOUBLE_KNIFE: '双刃夜间',
+  FIRST_SPEAKING_PHASE: '首轮发言',
+  INITIAL_COIN_PHASE: '初始金币选择',
   ROUND_MAGIC_SELECT: '水晶选择',
   MAGIC_RESOLUTION: '魔法解析',
   PLAYER_ACTIONS: '玩家行动',
@@ -36,6 +38,8 @@ const PHASE_LABELS: Record<GamePhase, string> = {
   ROUND_REVEAL: '公开牌面',
   ROUND_RESOLUTION: '本轮结算',
   CHECK_VICTORY: '胜负判定',
+  ROUND_SPEAKING_PHASE: '本轮轮流发言',
+  COIN_OWNER_SUMMARY_PHASE: '金币持有者总结',
   GAME_OVER: '游戏结束',
 };
 

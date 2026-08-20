@@ -69,6 +69,7 @@ export interface ClientView {
   winReason: string | null;
   roundNumber: number;
   round: ClientRoundView | null;
+  voice: GameState['voice'];
   me: {
     playerId: string;
     role: Role | null;
@@ -202,6 +203,10 @@ export const buildPlayerView = (state: GameState, viewerId: string): ClientView 
     winReason: state.winReason,
     roundNumber: state.roundNumber,
     round: state.round ? toRoundView(state.round) : null,
+    voice: {
+      ...state.voice,
+      speakerOrder: [...state.voice.speakerOrder],
+    },
     me: {
       playerId: viewer.id,
       role: viewer.role,

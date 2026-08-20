@@ -23,7 +23,11 @@ describe('HostGameController', () => {
     for (const p of controller.room.players) {
       controller.confirmIdentity(p.id);
     }
-    expect(controller.phase).toBe('ROUND_MAGIC_SELECT');
+    expect(controller.phase).toBe('FIRST_SPEAKING_PHASE');
+    for (const player of controller.room.players) {
+      controller.handleCommand({ type: 'END_SPEAKING', playerId: player.id });
+    }
+    expect(controller.phase).toBe('INITIAL_COIN_PHASE');
   });
 
   it('can reset a running game back to the lobby', () => {
@@ -97,7 +101,27 @@ describe('HostGameController full local game', () => {
         continue;
       }
 
-      if (phase === 'ROUND_MAGIC_SELECT') {
+      if (phase === 'FIRST_SPEAKING_PHASE' || phase === 'COIN_OWNER_SUMMARY_PHASE') {
+        controller.handleCommand({ type: 'END_SPEAKING', playerId: controller.getView(hostId)!.voice.currentSpeakerId! });
+        continue;
+      }
+
+      if (phase === 'ROUND_SPEAKING_PHASE') {
+        const view = controller.getView(hostId)!;
+        if (!view.voice.currentSpeakerId) {
+          controller.handleCommand({
+            type: 'SELECT_SPEAKING_ORDER',
+            playerId: view.currentCoinHolderId!,
+            firstPlayerId: view.players[0]!.id,
+            direction: 'CLOCKWISE',
+          });
+        } else {
+          controller.handleCommand({ type: 'END_SPEAKING', playerId: view.voice.currentSpeakerId });
+        }
+        continue;
+      }
+
+      if (phase === 'ROUND_MAGIC_SELECT' || phase === 'INITIAL_COIN_PHASE') {
         const view = controller.getView(hostId)!;
         const target = view.players.find((p) => p.hasCrystal)!;
         controller.handleCommand({ type: 'SELECT_COIN_TARGET', playerId: hostId, targetId: target.id });

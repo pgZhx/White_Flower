@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Card, GameState, Role } from '../src/index.js';
-import { resolveRound, checkVictoryAndAdvance } from '../src/index.js';
+import { resolveRound, checkVictoryAndAdvance, selectSpeakingOrder, endSpeaking } from '../src/index.js';
 import { advanceThroughNight, createStateWithRoles } from './helpers.js';
 
 const stateWithReveal = (roles: Role[], revealCards: Card[]): GameState => {
@@ -79,8 +79,18 @@ describe('Round Resolution', () => {
     );
     state = resolveRound(state);
     const result = checkVictoryAndAdvance(state);
-    expect(result.phase).toBe('ROUND_MAGIC_SELECT');
-    expect(result.roundNumber).toBe(2);
-    expect(result.round?.reveal).toBeNull();
+    expect(result.phase).toBe('ROUND_SPEAKING_PHASE');
+    expect(result.roundNumber).toBe(1);
+    expect(result.round?.reveal).not.toBeNull();
+
+    let next = selectSpeakingOrder(result, result.currentCoinHolderId ?? 'p0', 'p1', 'CLOCKWISE');
+    for (let i = 0; i < 5; i += 1) {
+      next = endSpeaking(next, next.voice.currentSpeakerId as string);
+    }
+    expect(next.phase).toBe('COIN_OWNER_SUMMARY_PHASE');
+    next = endSpeaking(next, next.voice.currentSpeakerId as string);
+    expect(next.phase).toBe('ROUND_MAGIC_SELECT');
+    expect(next.roundNumber).toBe(2);
+    expect(next.round?.reveal).toBeNull();
   });
 });

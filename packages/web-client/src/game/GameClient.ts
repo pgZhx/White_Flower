@@ -1,6 +1,7 @@
 import type { Card, ClientView, Faction, Role } from '@rose-blade/game-engine';
 import type { RoomPlayer, RoomState } from '@rose-blade/p2p-network';
 import type { GameCommand } from './HostGameController';
+import type { VoiceSignaling } from '../voice/VoiceRoom';
 
 export interface GameOverPlayer {
   id: string;
@@ -41,6 +42,7 @@ export interface GameClient {
   isRandomForced(playerId: string): boolean;
   getPendingMagic10(): PendingMagic10View | null;
   getGameOverSnapshot(): GameOverSnapshot | null;
+  getVoiceSignaling(): VoiceSignaling;
   get lastError(): string | null;
   reconnect?(): Promise<void>;
   disconnect(): void;

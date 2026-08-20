@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { GameClient } from '../game/GameClient';
+import { VoicePanel } from '../components/voice/VoicePanel';
+import type { VoiceController } from '../voice/VoiceController';
 
 interface LobbyScreenProps {
   roomId: string;
@@ -10,6 +12,7 @@ interface LobbyScreenProps {
   debug: boolean;
   onStart: () => void;
   onLeave: () => void;
+  voiceController: VoiceController | null;
 }
 
 const getInviteUrl = (roomId: string): string => {
@@ -31,6 +34,7 @@ export function LobbyScreen({
   debug,
   onStart,
   onLeave,
+  voiceController,
 }: LobbyScreenProps) {
   const [, setTick] = useState(0);
   const [copied, setCopied] = useState(false);
@@ -150,6 +154,8 @@ export function LobbyScreen({
             </p>
           )}
         </div>
+
+        <VoicePanel controller={voiceController} view={null} players={players} />
 
         {debug && isHost && (
           <div className="mt-4">

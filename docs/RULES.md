@@ -242,3 +242,15 @@ WHITE_ROSE 本身不计入 budCount；BISHOP 和 BELIEVER 均计数。
 - Magic 11
 
 不得把其他玩家隐藏信息发送到浏览器后再通过 CSS/前端 state 隐藏。
+
+## 18. 游戏内语音
+
+- 大厅阶段为 `FREE_CHAT`，玩家可以自行开关自己的麦克风。
+- 游戏开始后夜间、魔法、出牌、揭示和结算阶段均为 `MUTED`。
+- 首轮相认完成后进入 `FIRST_SPEAKING_PHASE`，从房主（房间首位玩家）开始按座位顺序轮流发言。
+- 每名玩家最多发言 60 秒，可以主动结束；倒计时结束时自动进入下一位。
+- 每轮结算后进入 `ROUND_SPEAKING_PHASE`，当前金币持有者选择第一位发言玩家及顺/逆时针方向。
+- 轮麦结束后进入 `COIN_OWNER_SUMMARY_PHASE`，金币持有者额外总结发言 60 秒。
+- 总结结束后进入下一轮水晶选择（现有 `ROUND_MAGIC_SELECT` 阶段）。
+- 发言人、发言顺序、倒计时和阶段由房主 Game Engine 权威状态控制，客户端不能自行解除禁音。
+- 浏览器通过 `getUserMedia({ audio: true })` 获取麦克风，音频媒体使用 `RTCPeerConnection`，信令通过现有房主中继网络转发。

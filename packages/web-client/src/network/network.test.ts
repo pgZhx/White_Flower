@@ -160,7 +160,7 @@ describe('NetworkHost + NetworkPeer over in-memory transport', () => {
     for (const p of controller.room.players) {
       controller.confirmIdentity(p.id);
     }
-    expect(controller.phase).toBe('ROUND_MAGIC_SELECT');
+    expect(controller.phase).toBe('FIRST_SPEAKING_PHASE');
   });
 
   it('does not allow a peer to start the game', async () => {
@@ -189,6 +189,27 @@ describe('NetworkHost + NetworkPeer over in-memory transport', () => {
 
     expect(controller.room.players.find((p) => p.nickname === 'Alice')?.ready).toBe(true);
     expect(controller.room.players.find((p) => p.nickname === 'Bob')?.ready).toBe(true);
+  });
+
+  it('routes voice signals and status through the host', async () => {
+    const { controller, host, peers } = await createHostWithPeers(['Alice', 'Bob']);
+    const alice = peers[0]!.peer;
+    const bob = peers[1]!.peer;
+    const aliceId = alice.state.playerId!;
+
+    const signals: Array<{ fromPlayerId: string; kind: string }> = [];
+    alice.onVoiceSignal((fromPlayerId, signal) => signals.push({ fromPlayerId, kind: signal.kind }));
+    bob.sendVoiceSignal(aliceId, { kind: 'ICE', data: { candidate: 'candidate-1' } });
+
+    const statuses: Array<{ playerId: string; enabled: boolean }> = [];
+    host.onVoiceStatus((playerId, enabled) => statuses.push({ playerId, enabled }));
+    bob.sendVoiceStatus(true);
+    await flush();
+
+    expect(signals).toEqual([{ fromPlayerId: bob.state.playerId, kind: 'ICE' }]);
+    expect(statuses).toEqual([{ playerId: bob.state.playerId, enabled: true }]);
+    expect(alice.state.voiceStatuses[bob.state.playerId!]).toBe(true);
+    expect(controller.room.players).toHaveLength(3);
   });
 
   it('rejects duplicate nicknames, full rooms, and started games', async () => {

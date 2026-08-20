@@ -2,6 +2,7 @@ import { NIGHT_ROLES } from '../config/cards.js';
 import type { Card, GameState } from '../types.js';
 import { appendEvent, createEvent } from '../events.js';
 import { InvalidPhaseError } from '../errors.js';
+import { createVoiceState } from './voice.js';
 
 export const performNightRecognition = (state: GameState): GameState => {
   if (state.phase !== 'NIGHT_RECOGNITION') {
@@ -51,6 +52,7 @@ export const performDoubleKnifeNight = (state: GameState): GameState => {
   });
 
   const firstPlayerId = state.players[0]?.id ?? null;
+  const firstSpeakingOrder = state.players.map((player) => player.id);
   const events = appendEvent(
     state.eventLog,
     createEvent('NIGHT_FINISHED', { doubleKnifePlayerIds: players.filter((p) => p.role === 'DOUBLE_KNIFE').map((p) => p.id) }),
@@ -58,11 +60,12 @@ export const performDoubleKnifeNight = (state: GameState): GameState => {
 
   return {
     ...state,
-    phase: 'ROUND_MAGIC_SELECT',
+    phase: 'FIRST_SPEAKING_PHASE',
     players,
     roundNumber: 1,
     currentCoinHolderId: firstPlayerId,
     round: createInitialRound(1, firstPlayerId),
+    voice: createVoiceState('TURN_BASED', firstPlayerId, firstSpeakingOrder),
     eventLog: events,
     version: state.version + 1,
   };

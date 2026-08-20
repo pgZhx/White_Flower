@@ -9,9 +9,12 @@ import type {
   NetworkMessage,
   PlayerViewMessage,
   ReadyCommand,
+  VoiceSignalMessage,
+  VoiceStatusMessage,
 } from '@rose-blade/p2p-network';
 import { createMessage, makePlayerId } from '@rose-blade/p2p-network';
 import { HostGameController, type GameCommand } from '../game/HostGameController';
+import type { VoiceSignal } from '../voice/VoiceRoom';
 
 const NICKNAME_PATTERN = /^[^\s]{1,16}$/;
 
@@ -21,6 +24,9 @@ export class NetworkHost {
   private readonly peerSessions = new Map<string, string>();
   private readonly disconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly unsubscribers: Array<() => void> = [];
+  private readonly voiceSignalHandlers = new Set<(fromPlayerId: string, signal: VoiceSignal) => void>();
+  private readonly voiceStatusHandlers = new Set<(playerId: string, enabled: boolean) => void>();
+  private readonly voiceStatuses = new Map<string, boolean>();
   private destroyed = false;
 
   constructor(
@@ -60,8 +66,90 @@ export class NetworkHost {
       case 'GAME_COMMAND':
         this.handleCommand(message, fromPeerId);
         return;
+      case 'VOICE_SIGNAL':
+        this.handleVoiceSignal(message, fromPeerId);
+        return;
+      case 'VOICE_STATUS':
+        this.handleVoiceStatus(message, fromPeerId);
+        return;
       default:
         break;
+    }
+  }
+
+  onVoiceSignal(handler: (fromPlayerId: string, signal: VoiceSignal) => void): () => void {
+    this.voiceSignalHandlers.add(handler);
+    return () => this.voiceSignalHandlers.delete(handler);
+  }
+
+  onVoiceStatus(handler: (playerId: string, enabled: boolean) => void): () => void {
+    this.voiceStatusHandlers.add(handler);
+    return () => this.voiceStatusHandlers.delete(handler);
+  }
+
+  sendVoiceSignal(toPlayerId: string, signal: VoiceSignal): void {
+    const peerId = this.playerToPeer.get(toPlayerId);
+    if (!peerId) return;
+    this.transport.sendTo(peerId, createMessage<VoiceSignalMessage>('VOICE_SIGNAL', {
+      roomId: this.controller.roomId,
+      payload: {
+        fromPlayerId: this.controller.hostPlayerId,
+        toPlayerId,
+        signal,
+      },
+    }));
+  }
+
+  sendVoiceStatus(enabled: boolean): void {
+    this.voiceStatuses.set(this.controller.hostPlayerId, enabled);
+    const message = createMessage<VoiceStatusMessage>('VOICE_STATUS', {
+      roomId: this.controller.roomId,
+      payload: { playerId: this.controller.hostPlayerId, enabled },
+    });
+    this.transport.broadcast(message);
+  }
+
+  private handleVoiceSignal(message: VoiceSignalMessage, fromPeerId?: string): void {
+    const fromPlayerId = fromPeerId ? this.peerToPlayer.get(fromPeerId) : undefined;
+    const targetId = message.payload.toPlayerId;
+    if (!fromPlayerId || !this.controller.room.players.some((player) => player.id === targetId)) return;
+
+    if (targetId === this.controller.hostPlayerId) {
+      for (const handler of this.voiceSignalHandlers) handler(fromPlayerId, message.payload.signal as VoiceSignal);
+      return;
+    }
+
+    const peerId = this.playerToPeer.get(targetId);
+    if (!peerId) return;
+    this.transport.sendTo(peerId, createMessage<VoiceSignalMessage>('VOICE_SIGNAL', {
+      roomId: this.controller.roomId,
+      payload: { fromPlayerId, toPlayerId: targetId, signal: message.payload.signal },
+    }));
+  }
+
+  private handleVoiceStatus(message: VoiceStatusMessage, fromPeerId?: string): void {
+    const playerId = fromPeerId ? this.peerToPlayer.get(fromPeerId) : undefined;
+    if (!playerId) return;
+    const enabled = Boolean(message.payload.enabled);
+    this.voiceStatuses.set(playerId, enabled);
+    const forwarded = createMessage<VoiceStatusMessage>('VOICE_STATUS', {
+      roomId: this.controller.roomId,
+      payload: { playerId, enabled },
+    });
+    this.transport.broadcast(forwarded);
+    for (const handler of this.voiceStatusHandlers) handler(playerId, enabled);
+  }
+
+  private sendVoiceStatusSnapshot(peerId: string): void {
+    for (const [playerId, enabled] of this.voiceStatuses) {
+      try {
+        this.transport.sendTo(peerId, createMessage<VoiceStatusMessage>('VOICE_STATUS', {
+          roomId: this.controller.roomId,
+          payload: { playerId, enabled },
+        }));
+      } catch {
+        // The peer may have disconnected between joining and the snapshot.
+      }
     }
   }
 
@@ -103,6 +191,7 @@ export class NetworkHost {
           },
         });
         this.transport.sendTo(peerId, accepted);
+        this.sendVoiceStatusSnapshot(peerId);
         this.broadcastAll();
         return;
       }
@@ -152,6 +241,7 @@ export class NetworkHost {
         },
       });
       this.transport.sendTo(peerId, accepted);
+      this.sendVoiceStatusSnapshot(peerId);
       this.broadcastAll();
       return;
     }
@@ -181,6 +271,7 @@ export class NetworkHost {
       },
     });
     this.transport.sendTo(peerId, accepted);
+    this.sendVoiceStatusSnapshot(peerId);
     this.broadcastLobby();
   }
 

@@ -3,6 +3,7 @@ import { ROLE_FACTION, ROLE_ORDER } from '../config/cards.js';
 import type { Card, GameState, PlayerState, RandomProvider, Role } from '../types.js';
 import { appendEvent, createEvent } from '../events.js';
 import { InvalidPhaseError } from '../errors.js';
+import { createVoiceState } from './voice.js';
 
 export interface NewPlayerInput {
   id: string;
@@ -49,6 +50,7 @@ export const createGame = (id: string, players: NewPlayerInput[]): GameState => 
     winner: null,
     winReason: null,
     round: null,
+    voice: createVoiceState('MUTED'),
     eventLog: [],
     version: 0,
   };
@@ -100,6 +102,7 @@ export const startGame = (state: GameState, random: RandomProvider): GameState =
     ...state,
     phase: 'NIGHT_RECOGNITION',
     players,
+    voice: createVoiceState('MUTED'),
     eventLog: events,
     version: state.version + 1,
   };
