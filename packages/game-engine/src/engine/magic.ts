@@ -250,12 +250,14 @@ export const applyMagic10 = (
   if (target.hand.length === 0) {
     throw new InvalidTargetError('Magic 10 target must have at least one remaining hand card');
   }
-  if (replacementCard === null || !target.hand.includes(replacementCard) || replacementCard === action.card) {
-    throw new InvalidTargetError('Replacement card must be a different card from the played card in target hand');
+  if (replacementCard === null || !target.hand.includes(replacementCard)) {
+    throw new InvalidTargetError('Replacement card must be in the target hand after their original play');
   }
 
   const originalCard = action.card;
-  // The played card returns to hand, then a different replacement card is removed and submitted.
+  // The played card returns to hand, then one physical card from the remaining
+  // hand is removed and submitted. Duplicate card faces are separate entries
+  // in the hand array, so replacing a card with another copy is legal.
   const newHand = removeOneCard([...target.hand, originalCard], replacementCard);
   const playedCard = replacementCard;
   const newActions = { ...(state.round?.actions ?? {}) };

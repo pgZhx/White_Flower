@@ -17,6 +17,10 @@ export function RoundTable({ view, myPlayerId, currentPlayerId }: { view: Client
   const currentPlayer = sorted.find((player) => player.id === currentPlayerId);
   return <div className="round-table" aria-label="数字桌游圆桌">
     <div className="round-table__surface"><div className="round-table__grain" /><div className="round-table__center">
+      <div className="round-counter" aria-label={`第 ${view.roundNumber} 轮，共 ${view.players.length} 轮`}>
+        <span className="round-counter__label">游戏轮次</span>
+        <strong>第 {view.roundNumber} / 共 {view.players.length} 轮</strong>
+      </div>
       <VictoryHUD whiteRoseState={whiteRoseState} sacrificed={sacrificed} sacrificeThreshold={rules.sacrificeThreshold} deadBelievers={deadBelievers} deathThreshold={rules.deathThreshold} greatSwords={greatSwords} doubleKnives={doubleKnives} darkKnives={darkKnives} />
       <CurrentTurnIndicator player={currentPlayer} />
     </div></div>

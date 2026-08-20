@@ -766,7 +766,7 @@ function ActionPanel({
 }) {
   const currentPlayerId = client.currentPlayerId;
   const isMyTurn = currentPlayerId === activePlayerId;
-  const [selectedCard, setSelectedCard] = useState<Card | null>(null);
+  const [selectedCardIndex, setSelectedCardIndex] = useState<number | null>(null);
   const canPass = client.canPass(activePlayerId);
   const randomForced = client.isRandomForced(activePlayerId);
   const magic5Constraint = view.round?.magic5Constraint;
@@ -790,6 +790,8 @@ function ActionPanel({
       client.handleCommand({ type: 'PLAY_CARD', playerId: activePlayerId, card: view.me.hand[0]! });
       return;
     }
+    if (selectedCardIndex === null) return;
+    const selectedCard = view.me.hand[selectedCardIndex];
     if (!selectedCard) return;
     client.handleCommand({ type: 'PLAY_CARD', playerId: activePlayerId, card: selectedCard });
   };
@@ -804,8 +806,8 @@ function ActionPanel({
           {view.me.hand.map((card, i) => (
             <button
               key={`${card}-${i}`}
-              className={`rounded border px-3 py-1 ${selectedCard === card ? 'border-rose bg-rose text-stone-900' : 'border-stone-600 text-stone-200 hover:bg-stone-700'}`}
-              onClick={() => setSelectedCard((cur) => (cur === card ? null : card))}
+              className={`rounded border px-3 py-1 ${selectedCardIndex === i ? 'border-rose bg-rose text-stone-900' : 'border-stone-600 text-stone-200 hover:bg-stone-700'}`}
+              onClick={() => setSelectedCardIndex((cur) => (cur === i ? null : i))}
             >
               {cardLabel(card)}
             </button>
@@ -815,7 +817,7 @@ function ActionPanel({
       <div className="mt-4 flex gap-2">
         <button
           className="rounded bg-blood px-4 py-2 font-semibold text-white hover:bg-red-800 disabled:opacity-40"
-          disabled={!randomForced && !magic5MustPass && !selectedCard}
+          disabled={!randomForced && !magic5MustPass && selectedCardIndex === null}
           onClick={play}
         >
           {randomForced ? '随机出牌' : '确认出牌'}
@@ -881,7 +883,7 @@ function Magic10Panel({
 
   return (
     <Panel title="魔法 10：换牌">
-      <p className="text-stone-300">请从当前手牌选择一张不同的牌替换本轮已出的牌。</p>
+      <p className="text-stone-300">请从当前手牌选择一张牌替换本轮已出的牌；如果手里还有同名牌，也可以选择它。</p>
       <div className="mt-3 flex flex-wrap gap-2">
         {view.me.hand.map((card, i) => (
           <button
@@ -1046,8 +1048,8 @@ function SeatMap({ view, myPlayerId, currentPlayerId }: { view: ClientView; myPl
         {collapsed ? '展开座位图' : '收起座位图'}
       </button>
       {!collapsed && <>
-        <HandCardArea cards={view.me.hand} />
         <RoundTable view={view} myPlayerId={myPlayerId} currentPlayerId={currentPlayerId} />
+        <HandCardArea cards={view.me.hand} />
       </>}
     </section>
   );

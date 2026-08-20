@@ -270,6 +270,28 @@ describe('Magic 10', () => {
     expect(next.round?.actions['p1']?.type).toBe('PLAYED');
   });
 
+  it('allows replacing with another physical copy of the played card', () => {
+    let state = baseMagicState(['WHITE_ROSE', 'BISHOP', 'BELIEVER', 'DOUBLE_KNIFE', 'DARK_KNIFE'], 10);
+    state = resolveCurrentMagic(state, [], random);
+    state = setHand(state, 'p1', ['DOUBLE_KNIFE', 'DOUBLE_KNIFE']);
+    state = submitAction(state, 'p0', 'PASS', null, random);
+    state = submitAction(state, 'p1', 'PLAY', 'DOUBLE_KNIFE', random);
+    state = submitAction(state, 'p2', 'PASS', null, random);
+    state = submitAction(state, 'p3', 'PASS', null, random);
+    state = submitAction(state, 'p4', 'PASS', null, random);
+    state = submitMagic10Target(state, 'p0', 'p1');
+
+    const next = submitMagic10Replacement(state, 'p1', 'DOUBLE_KNIFE');
+    expect(next.phase).toBe('ROUND_REVEAL');
+    expect(next.round?.actions['p1']).toEqual({
+      type: 'PLAYED',
+      card: 'DOUBLE_KNIFE',
+      originalCard: 'DOUBLE_KNIFE',
+    });
+    expect(playerById(next, 'p1').hand).toHaveLength(1);
+    expect(playerById(next, 'p1').hand[0]).toBe('DOUBLE_KNIFE');
+  });
+
   it('rejects target who did not play a card', () => {
     let state = baseMagicState(['WHITE_ROSE', 'BISHOP', 'BELIEVER', 'DOUBLE_KNIFE', 'DARK_KNIFE'], 10);
     state = resolveCurrentMagic(state, [], random);

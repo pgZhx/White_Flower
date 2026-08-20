@@ -326,8 +326,8 @@ export const submitMagic10Replacement = (
     throw new InvalidTargetError('Target did not play a card this round');
   }
   const target = getPlayer(state, targetId);
-  if (!target.hand.includes(replacementCard) || replacementCard === originalAction.card) {
-    throw new InvalidTargetError('Replacement card must be a different card from the played card and in hand');
+  if (!target.hand.includes(replacementCard)) {
+    throw new InvalidTargetError('Replacement card must be in hand after the original play');
   }
 
   const casterId = pending.casterId;
