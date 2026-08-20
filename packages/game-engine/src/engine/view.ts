@@ -83,6 +83,7 @@ export interface ClientView {
   };
   eventLog: GameState['eventLog'];
   phaseConfirmation?: ClientPhaseConfirmation | null;
+  rematchConfirmation?: ClientPhaseConfirmation | null;
 }
 
 const toPublicPlayer = (player: GameState['players'][number]): ClientPlayerView => ({

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { GameState } from '@rose-blade/game-engine';
 import { HostGameController } from './HostGameController';
 
 const makeFivePlayerController = () => {
@@ -34,9 +35,27 @@ describe('HostGameController', () => {
     expect(controller.room.players.every((p) => !p.ready)).toBe(true);
   });
 
-  it('can immediately rematch into a new game', () => {
+  it('waits for every player before starting a rematch', () => {
     const controller = makeFivePlayerController();
-    controller.rematch();
+    const internals = controller as unknown as { gameState: GameState };
+    internals.gameState = {
+      ...internals.gameState,
+      phase: 'GAME_OVER',
+      winner: 'WHITE_ROSE',
+      winReason: 'TEST',
+    };
+    for (const player of controller.room.players.slice(0, 4)) {
+      controller.rematch(player.id);
+    }
+    expect(controller.phase).toBe('GAME_OVER');
+    expect(controller.getView(controller.room.players[0]!.id)?.rematchConfirmation).toEqual({
+      required: 5,
+      confirmed: 4,
+      confirmedByMe: true,
+      allConfirmed: false,
+    });
+
+    controller.rematch(controller.room.players[4]!.id);
     expect(controller.phase).toBe('NIGHT_RECOGNITION');
     expect(controller.room.status).toBe('PLAYING');
     expect(controller.room.players.every((p) => p.ready)).toBe(true);

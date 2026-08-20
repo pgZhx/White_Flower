@@ -403,12 +403,8 @@ export default function App() {
 
   const handleRematch = () => {
     if (!client) return;
-    const roomId = client.roomId;
-    const nickname = screen.name === 'game' ? screen.nickname : '';
     const playerId = client.playerId ?? '';
-    const isHost = client.isHost;
     client.handleCommand({ type: 'REMATCH', playerId });
-    setScreen({ name: 'game', roomId, nickname, playerId, isHost });
   };
 
   const handleStart = () => {

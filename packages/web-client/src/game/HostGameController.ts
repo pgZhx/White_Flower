@@ -52,6 +52,7 @@ export interface HostGameControllerSnapshot {
   room: RoomState;
   gameState: GameState | null;
   phaseConfirmations: Array<{ phase: GameState['phase']; playerIds: string[] }>;
+  rematchPlayerIds?: string[];
 }
 
 export class HostGameController {
@@ -62,6 +63,7 @@ export class HostGameController {
   private gameState: GameState | null = null;
   private engine: GameEngine | null = null;
   private phaseConfirmations = new Map<string, Set<string>>();
+  private rematchPlayerIds = new Set<string>();
   private listeners = new Set<() => void>();
 
   constructor(options: HostGameControllerOptions) {
@@ -126,6 +128,7 @@ export class HostGameController {
         p.id === playerId ? { ...p, connected } : p,
       ),
     };
+    this.tryStartRematch();
     this.emit();
   }
 
@@ -168,6 +171,7 @@ export class HostGameController {
     this.engine = new GameEngine(gameState);
     this.engine.startGame(new SeededRandom(this.seed));
     this.gameState = this.engine.getState();
+    this.rematchPlayerIds.clear();
     this.phaseConfirmations.clear();
     this.room = { ...this.room, status: 'PLAYING' };
     this.emit();
@@ -246,6 +250,7 @@ export class HostGameController {
     return {
       ...view,
       phaseConfirmation: this.getPhaseConfirmation(playerId),
+      rematchConfirmation: this.getRematchConfirmation(playerId),
     };
   }
 
@@ -342,10 +347,52 @@ export class HostGameController {
     };
   }
 
+  private connectedPlayers(): RoomPlayer[] {
+    return this.room.players.filter((player) => player.connected);
+  }
+
+  private allRematchPlayersConfirmed(): boolean {
+    const players = this.connectedPlayers();
+    return players.length >= 5 && players.every((player) => this.rematchPlayerIds.has(player.id));
+  }
+
+  getRematchConfirmation(viewerId: string): NonNullable<ClientView['rematchConfirmation']> | null {
+    if (!this.gameState || this.gameState.phase !== 'GAME_OVER') {
+      return null;
+    }
+    const players = this.connectedPlayers();
+    const confirmed = players.filter((player) => this.rematchPlayerIds.has(player.id)).length;
+    return {
+      required: players.length,
+      confirmed,
+      confirmedByMe: this.rematchPlayerIds.has(viewerId),
+      allConfirmed: this.allRematchPlayersConfirmed(),
+    };
+  }
+
+  private tryStartRematch(): void {
+    if (!this.gameState || this.gameState.phase !== 'GAME_OVER' || !this.allRematchPlayersConfirmed()) {
+      return;
+    }
+
+    const players = this.connectedPlayers();
+    this.room = {
+      ...this.room,
+      players: players.map((player, index) => ({ ...player, seat: index, ready: true })),
+    };
+    this.gameState = null;
+    this.engine = null;
+    this.phaseConfirmations.clear();
+    this.rematchPlayerIds.clear();
+    this.seed = Date.now() + Math.floor(Math.random() * 100000);
+    this.startGame();
+  }
+
   restartGame(): void {
     this.gameState = null;
     this.engine = null;
     this.phaseConfirmations.clear();
+    this.rematchPlayerIds.clear();
     this.room = {
       ...this.room,
       status: 'LOBBY',
@@ -354,18 +401,18 @@ export class HostGameController {
     this.emit();
   }
 
-  rematch(): void {
-    this.gameState = null;
-    this.engine = null;
-    this.phaseConfirmations.clear();
-    this.seed = Date.now() + Math.floor(Math.random() * 100000);
-    this.room = {
-      ...this.room,
-      status: 'LOBBY',
-      players: this.room.players.map((p) => ({ ...p, ready: true })),
-    };
+  rematch(playerId: string): void {
+    if (!this.gameState || this.gameState.phase !== 'GAME_OVER') {
+      throw new Error('只能在游戏结束后申请再来一局');
+    }
+    const player = this.room.players.find((item) => item.id === playerId);
+    if (!player || !player.connected) {
+      throw new Error('只有当前在线玩家可以申请再来一局');
+    }
+
+    this.rematchPlayerIds.add(playerId);
+    this.tryStartRematch();
     this.emit();
-    this.startGame();
   }
 
   snapshot(): HostGameControllerSnapshot {
@@ -380,6 +427,7 @@ export class HostGameController {
         phase: phase as GameState['phase'],
         playerIds: [...ids],
       })),
+      rematchPlayerIds: [...this.rematchPlayerIds],
     };
   }
 
@@ -395,6 +443,7 @@ export class HostGameController {
     controller.phaseConfirmations = new Map(
       snapshot.phaseConfirmations.map((entry) => [entry.phase, new Set(entry.playerIds)]),
     );
+    controller.rematchPlayerIds = new Set(snapshot.rematchPlayerIds ?? []);
     return controller;
   }
 
@@ -413,7 +462,7 @@ export class HostGameController {
         return;
       }
       if (command.type === 'REMATCH') {
-        this.rematch();
+        this.rematch(command.playerId);
         return;
       }
       throw new Error('游戏尚未开始');
@@ -430,7 +479,7 @@ export class HostGameController {
         this.restartGame();
         return;
       case 'REMATCH':
-        this.rematch();
+        this.rematch(command.playerId);
         return;
       case 'CONFIRM_IDENTITY':
         this.confirmIdentity(command.playerId);

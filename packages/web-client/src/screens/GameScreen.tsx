@@ -282,7 +282,12 @@ export function GameScreen({ roomId, nickname, isHost, client, debug, onExit, on
             )}
 
             {phase === 'GAME_OVER' && gameOver && (
-              <GameOverPanel gameOver={gameOver} onBackToRoom={onBackToRoom} onRematch={onRematch} />
+              <GameOverPanel
+                gameOver={gameOver}
+                rematchConfirmation={view.rematchConfirmation}
+                onBackToRoom={onBackToRoom}
+                onRematch={onRematch}
+              />
             )}
 
             {view.me.magic9Reveal && (
@@ -1004,13 +1009,16 @@ function ResolutionPanel({
 
 function GameOverPanel({
   gameOver,
+  rematchConfirmation,
   onBackToRoom,
   onRematch,
 }: {
   gameOver: NonNullable<ReturnType<GameClient['getGameOverSnapshot']>>;
+  rematchConfirmation: ClientView['rematchConfirmation'];
   onBackToRoom: () => void;
   onRematch: () => void;
 }) {
+  const rematchConfirmed = rematchConfirmation?.confirmedByMe ?? false;
   return (
     <Panel title="游戏结束">
       <p className="text-3xl font-bold text-rose">{gameOver.winner === 'WHITE_ROSE' ? '白蔷薇阵营胜利' : '血刃阵营胜利'}</p>
@@ -1026,13 +1034,23 @@ function GameOverPanel({
         ))}
       </div>
       <div className="mt-5 flex flex-wrap gap-2">
-        <button className="rounded bg-blood px-4 py-2 font-semibold text-white hover:bg-red-800" onClick={onRematch}>
-          再来一局
+        <button
+          className="rounded bg-blood px-4 py-2 font-semibold text-white hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-60"
+          disabled={rematchConfirmed}
+          onClick={onRematch}
+        >
+          {rematchConfirmed ? '已确认，等待其他玩家' : '再来一局'}
         </button>
         <button className="rounded border border-stone-600 px-4 py-2 font-semibold text-stone-300 hover:bg-stone-700" onClick={onBackToRoom}>
           返回房间
         </button>
       </div>
+      {rematchConfirmation && (
+        <p className="mt-3 text-sm text-stone-400">
+          再来一局确认：{rematchConfirmation.confirmed}/{rematchConfirmation.required} 人
+          {rematchConfirmation.allConfirmed ? '，正在开始…' : '，等待其他玩家确认。'}
+        </p>
+      )}
     </Panel>
   );
 }
