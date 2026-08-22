@@ -17,6 +17,12 @@ import { HostGameController, type GameCommand } from '../game/HostGameController
 import type { VoiceSignal } from '../voice/VoiceRoom';
 
 const NICKNAME_PATTERN = /^[^\s]{1,16}$/;
+const MAX_PENDING_VOICE_SIGNALS = 256;
+
+interface PendingVoiceSignal {
+  fromPlayerId: string;
+  signal: VoiceSignal;
+}
 
 export class NetworkHost {
   private readonly peerToPlayer = new Map<string, string>();
@@ -27,6 +33,7 @@ export class NetworkHost {
   private readonly voiceSignalHandlers = new Set<(fromPlayerId: string, signal: VoiceSignal) => void>();
   private readonly voiceStatusHandlers = new Set<(playerId: string, enabled: boolean) => void>();
   private readonly voiceStatuses = new Map<string, boolean>();
+  private readonly pendingVoiceSignals: PendingVoiceSignal[] = [];
   private destroyed = false;
 
   constructor(
@@ -52,6 +59,7 @@ export class NetworkHost {
     this.peerToPlayer.clear();
     this.playerToPeer.clear();
     this.peerSessions.clear();
+    this.pendingVoiceSignals.length = 0;
   }
 
   private handleMessage(message: NetworkMessage, fromPeerId?: string): void {
@@ -79,6 +87,8 @@ export class NetworkHost {
 
   onVoiceSignal(handler: (fromPlayerId: string, signal: VoiceSignal) => void): () => void {
     this.voiceSignalHandlers.add(handler);
+    const pending = this.pendingVoiceSignals.splice(0);
+    for (const item of pending) handler(item.fromPlayerId, item.signal);
     return () => this.voiceSignalHandlers.delete(handler);
   }
 
@@ -115,6 +125,16 @@ export class NetworkHost {
     if (!fromPlayerId || !this.controller.room.players.some((player) => player.id === targetId)) return;
 
     if (targetId === this.controller.hostPlayerId) {
+      if (this.voiceSignalHandlers.size === 0) {
+        if (this.pendingVoiceSignals.length >= MAX_PENDING_VOICE_SIGNALS) {
+          this.pendingVoiceSignals.shift();
+        }
+        this.pendingVoiceSignals.push({
+          fromPlayerId,
+          signal: message.payload.signal as VoiceSignal,
+        });
+        return;
+      }
       for (const handler of this.voiceSignalHandlers) handler(fromPlayerId, message.payload.signal as VoiceSignal);
       return;
     }

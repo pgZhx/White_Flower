@@ -105,9 +105,9 @@ packages/web-client/dist/
 
 该目录可直接交给任意静态 HTTP Server / Vercel / Cloudflare Pages / GitHub Pages / Nginx 托管。
 
-### Browser Multiplayer (WebSocket Relay)
+### Browser Multiplayer (WebSocket Relay + WebRTC Voice)
 
-当前生产联机使用轻量 WebSocket Relay，不再依赖 WebRTC/STUN/TURN 穿透：
+当前生产联机的游戏状态使用轻量 WebSocket Relay；房间语音使用浏览器 WebRTC：
 
 1. 房主打开公网地址并创建房间。
 2. 获得邀请链接 `https://域名/?room=AB7K2P`。
@@ -118,9 +118,13 @@ packages/web-client/dist/
 - 房主浏览器是 authoritative host，持有完整 GameState 与唯一 GameEngine。
 - 普通玩家只发送命令，并接收自己的 PlayerView。
 - Relay 只负责转发消息，不运行 GameEngine、不理解游戏规则。
+- Relay 同时转发语音 SDP/ICE 信令，但不承载音频；跨运营商网络的音频需要 TURN。
 - 通信层通过 `packages/p2p-network` 抽象，支持 LocalTransport、WebSocket Relay Transport，以及 WebRTC fallback。
 - 生产环境使用 Nginx 代理 `/relay` 到本机 `127.0.0.1:9001`。
 - 详见 `docs/P2P_NETWORKING.md`。
+
+生产构建前应在 `packages/web-client/.env.production` 配置语音 ICE 服务。格式参见
+`packages/web-client/.env.example`。没有 TURN 时，同一局中的部分手机或严格 NAT 网络可能无法建立音频连接。
 
 ### Local Multiplayer Simulation (Debug Only)
 

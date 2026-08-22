@@ -536,6 +536,9 @@ export class HostGameController {
         this.confirmIdentity(command.playerId);
         return;
       case 'SELECT_COIN_TARGET':
+        if (this.gameState.currentCoinHolderId !== command.playerId) {
+          throw new Error('只有当前金币持有人可以选择下一位水晶玩家');
+        }
         this.engine.selectCoinTarget(command.targetId);
         break;
       case 'SELECT_SPEAKING_ORDER':

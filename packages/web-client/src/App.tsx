@@ -59,7 +59,11 @@ function errorCode(error: unknown): string | undefined {
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('连接超时，请确认房主在线后重试。')), ms);
+    const timer = setTimeout(() => {
+      const error = new Error('连接超时，请确认房主在线后重试。');
+      (error as Error & { code?: string }).code = 'CONNECTION_TIMEOUT';
+      reject(error);
+    }, ms);
     promise.then(
       (value) => {
         clearTimeout(timer);
@@ -80,6 +84,11 @@ function isUnavailableId(error: unknown): boolean {
 
 function isRoomExists(error: unknown): boolean {
   return errorCode(error) === 'ROOM_EXISTS';
+}
+
+function isRetryableRelayError(error: unknown): boolean {
+  const code = errorCode(error);
+  return code === 'ROOM_NOT_FOUND' || code === 'SERVER_UNAVAILABLE' || code === 'CONNECTION_TIMEOUT';
 }
 
 
@@ -164,7 +173,7 @@ async function createHostClient(nickname: string): Promise<{ client: HostGameCli
       transport.disconnect();
       if (transportMode === 'webrtc') {
         if (isUnavailableId(error)) continue;
-      } else if (isRoomExists(error)) {
+      } else if (isRoomExists(error) || isRetryableRelayError(error)) {
         continue;
       }
       break;
@@ -177,13 +186,16 @@ async function createPeerClient(
   nickname: string,
   roomId: string,
   savedSession?: PeerSession | null,
+  options: { maxAttempts?: number; timeoutMs?: number } = {},
 ): Promise<{ client: PeerGameClient; peerId: string }> {
   const normalizedRoomId = roomId.trim().toUpperCase();
   const transportMode = getTransportMode();
   const peerId = savedSession?.peerId ?? makePeerId('guest');
   let lastError: unknown = new Error('加入房间失败');
 
-  for (let attempt = 0; attempt < 5; attempt += 1) {
+  const maxAttempts = options.maxAttempts ?? 5;
+  const timeoutMs = options.timeoutMs ?? 12000;
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     const transport =
       transportMode === 'webrtc'
         ? new WebRtcTransport({ role: 'peer', peerId, hostPeerId: normalizedRoomId, ...getPeerJSOptions() })
@@ -195,15 +207,15 @@ async function createPeerClient(
           });
 
     try {
-      await withTimeout(transport.connect(), 12000);
+      await withTimeout(transport.connect(), timeoutMs);
       const networkPeer = new NetworkPeer(transport, peerId);
       const peerClient = new PeerGameClient(networkPeer, normalizedRoomId);
-      await peerClient.connect(nickname, savedSession?.playerId ?? undefined);
+      await peerClient.connect(nickname, savedSession?.playerId ?? undefined, timeoutMs);
       return { client: peerClient, peerId };
     } catch (error) {
       lastError = error;
       transport.disconnect();
-      if (errorCode(error) !== 'ROOM_NOT_FOUND') throw error;
+      if (!isRetryableRelayError(error)) throw error;
       await new Promise((resolve) => setTimeout(resolve, 300 * (attempt + 1)));
     }
   }
@@ -213,11 +225,13 @@ async function createPeerClient(
 async function restoreHostClient(
   session: { roomId: string; nickname: string; playerId: string; peerId: string },
   snapshot: ReturnType<HostGameController['snapshot']>,
+  options: { maxAttempts?: number; timeoutMs?: number } = {},
 ): Promise<{ client: HostGameClient; peerId: string }> {
   const controller = HostGameController.fromSnapshot(snapshot);
   const transportMode = getTransportMode();
   let lastError: unknown = new Error('恢复房间失败');
-  for (let attempt = 0; attempt < 5; attempt += 1) {
+  const maxAttempts = options.maxAttempts ?? 5;
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     const transport =
       transportMode === 'webrtc'
         ? new WebRtcTransport({ role: 'host', peerId: session.roomId, ...getPeerJSOptions() })
@@ -226,6 +240,7 @@ async function restoreHostClient(
             roomId: session.roomId,
             clientId: session.peerId,
             url: getRelayUrl(),
+            ...(options.timeoutMs ? { connectTimeoutMs: options.timeoutMs } : {}),
           });
     const networkHost = new NetworkHost(controller, transport);
     try {
@@ -364,7 +379,7 @@ export default function App() {
     }
   };
 
-  const handleJoin = async (nickname: string, roomId: string) => {
+  const handleJoin = async (nickname: string, roomId: string, autoRestore = false) => {
     const normalizedRoomId = roomId.trim().toUpperCase();
     if (debugMode) {
       const roomId = generateRoomCode();
@@ -388,7 +403,12 @@ export default function App() {
     setScreen({ name: 'connecting', message: `正在连接房间 ${normalizedRoomId}…` });
     try {
       const savedSession = loadPeerSession(normalizedRoomId);
-      const { client: peerClient, peerId } = await createPeerClient(nickname, normalizedRoomId, savedSession);
+      const { client: peerClient, peerId } = await createPeerClient(
+        nickname,
+        normalizedRoomId,
+        savedSession,
+        autoRestore ? { maxAttempts: 1, timeoutMs: 3000 } : {},
+      );
       savePeerSession({
         roomId: normalizedRoomId,
         role: 'peer',
@@ -417,7 +437,12 @@ export default function App() {
             },
       );
     } catch (error) {
-      setScreen({ name: 'error', message: errorMessage(error) });
+      if (autoRestore) {
+        clearRoomSession(normalizedRoomId);
+        setScreen({ name: 'home' });
+      } else {
+        setScreen({ name: 'error', message: errorMessage(error) });
+      }
     }
   };
 
@@ -459,16 +484,31 @@ export default function App() {
 
   useEffect(() => {
     if (debugMode || !roomParamReady || screen.name !== 'home' || client) return;
-    const roomToRestore = (initialRoom ?? loadLastHostRoom() ?? loadLastPeerRoom())?.trim().toUpperCase();
+    const activeHostRoom = loadLastHostRoom()?.trim().toUpperCase();
+    const activePeerRoom = loadLastPeerRoom()?.trim().toUpperCase();
+    const roomToRestore = activeHostRoom ?? activePeerRoom;
     if (!roomToRestore) return;
+    const normalizedInitialRoom = initialRoom?.trim().toUpperCase();
+    if (normalizedInitialRoom && normalizedInitialRoom !== roomToRestore) return;
 
     let cancelled = false;
     const run = async () => {
+      const peerSaved = loadPeerSession(roomToRestore);
       const hostSaved = loadHostSession(roomToRestore);
-      if (hostSaved) {
+      if (activePeerRoom === roomToRestore && peerSaved) {
+        setScreen({ name: 'connecting', message: `正在重新连接房间 ${roomToRestore}…` });
+        await handleJoin(peerSaved.nickname, roomToRestore, true);
+        return;
+      }
+
+      if (activeHostRoom === roomToRestore && hostSaved) {
         setScreen({ name: 'connecting', message: '正在恢复房间…' });
         try {
-          const { client: hostClient } = await restoreHostClient(hostSaved.session, hostSaved.snapshot);
+          const { client: hostClient } = await restoreHostClient(
+            hostSaved.session,
+            hostSaved.snapshot,
+            { maxAttempts: 1, timeoutMs: 3000 },
+          );
           if (cancelled) {
             hostClient.disconnect();
             return;
@@ -492,17 +532,16 @@ export default function App() {
                   isHost: true,
                 },
           );
-        } catch (error) {
-          if (!cancelled) setScreen({ name: 'error', message: errorMessage(error) });
+        } catch {
+          if (!cancelled) {
+            clearRoomSession(roomToRestore);
+            setScreen({ name: 'home' });
+          }
         }
         return;
       }
 
-      const peerSaved = loadPeerSession(roomToRestore);
-      if (peerSaved) {
-        setScreen({ name: 'connecting', message: `正在重新连接房间 ${roomToRestore}…` });
-        await handleJoin(peerSaved.nickname, roomToRestore);
-      }
+      clearRoomSession(roomToRestore);
     };
 
     void run();
@@ -517,7 +556,7 @@ export default function App() {
   if (screen.name === 'home') {
     return (
       <HomeScreen
-        initialRoom={initialRoom ?? (roomParamReady ? loadLastHostRoom() ?? loadLastPeerRoom() ?? undefined : undefined)}
+        initialRoom={initialRoom ?? undefined}
         onCreate={handleCreate}
         onJoin={handleJoin}
       />

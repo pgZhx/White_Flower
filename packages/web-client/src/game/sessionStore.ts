@@ -40,6 +40,30 @@ function safeSet(key: string, value: string): void {
   }
 }
 
+function safeSessionGet(key: string): string | null {
+  try {
+    return window.sessionStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function safeSessionSet(key: string, value: string): void {
+  try {
+    window.sessionStorage.setItem(key, value);
+  } catch {
+    // Automatic restore is best-effort when session storage is unavailable.
+  }
+}
+
+function safeSessionRemove(key: string): void {
+  try {
+    window.sessionStorage.removeItem(key);
+  } catch {
+    // Ignore.
+  }
+}
+
 function safeRemove(key: string): void {
   try {
     window.localStorage.removeItem(key);
@@ -50,7 +74,9 @@ function safeRemove(key: string): void {
 
 export function savePeerSession(session: PeerSession): void {
   safeSet(`${PEER_PREFIX}${session.roomId}`, JSON.stringify(session));
-  safeSet(LAST_PEER_KEY, session.roomId);
+  safeSessionSet(LAST_PEER_KEY, session.roomId);
+  safeSessionRemove(LAST_HOST_KEY);
+  safeRemove(LAST_PEER_KEY);
 }
 
 export function loadPeerSession(roomId: string): PeerSession | null {
@@ -67,12 +93,15 @@ export function loadPeerSession(roomId: string): PeerSession | null {
 
 export function clearPeerSession(roomId: string): void {
   safeRemove(`${PEER_PREFIX}${roomId}`);
-  if (loadLastPeerRoom() === roomId) safeRemove(LAST_PEER_KEY);
+  if (loadLastPeerRoom() === roomId) safeSessionRemove(LAST_PEER_KEY);
+  safeRemove(LAST_PEER_KEY);
 }
 
 export function saveHostSession(session: HostSession, snapshot: HostGameControllerSnapshot): void {
   safeSet(`${HOST_PREFIX}${session.roomId}`, JSON.stringify({ session, snapshot }));
-  safeSet(LAST_HOST_KEY, session.roomId);
+  safeSessionSet(LAST_HOST_KEY, session.roomId);
+  safeSessionRemove(LAST_PEER_KEY);
+  safeRemove(LAST_HOST_KEY);
 }
 
 export function loadHostSession(roomId: string): { session: HostSession; snapshot: HostGameControllerSnapshot } | null {
@@ -88,16 +117,21 @@ export function loadHostSession(roomId: string): { session: HostSession; snapsho
 }
 
 export function loadLastHostRoom(): string | null {
-  return safeGet(LAST_HOST_KEY);
+  // Remove legacy persistent markers that previously caused stale rooms to be
+  // reconnected every time the browser was reopened.
+  safeRemove(LAST_HOST_KEY);
+  return safeSessionGet(LAST_HOST_KEY);
 }
 
 export function loadLastPeerRoom(): string | null {
-  return safeGet(LAST_PEER_KEY);
+  safeRemove(LAST_PEER_KEY);
+  return safeSessionGet(LAST_PEER_KEY);
 }
 
 export function clearHostSession(roomId: string): void {
   safeRemove(`${HOST_PREFIX}${roomId}`);
-  if (loadLastHostRoom() === roomId) safeRemove(LAST_HOST_KEY);
+  if (loadLastHostRoom() === roomId) safeSessionRemove(LAST_HOST_KEY);
+  safeRemove(LAST_HOST_KEY);
 }
 
 export function clearRoomSession(roomId: string): void {

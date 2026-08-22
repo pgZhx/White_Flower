@@ -18,6 +18,7 @@ export class VoiceManager {
   get isAllowed(): boolean { return this.allowed; }
   get isMuted(): boolean { return !this.hasPermission || !this.userEnabled || !this.allowed; }
   get isEffectivelyEnabled(): boolean { return !this.isMuted; }
+  get localStream(): MediaStream | null { return this.stream; }
   get mediaStream(): MediaStream | null { return this.stream; }
 
   async requestPermission(): Promise<boolean> {

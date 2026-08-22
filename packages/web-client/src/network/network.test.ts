@@ -197,9 +197,11 @@ describe('NetworkHost + NetworkPeer over in-memory transport', () => {
     const bob = peers[1]!.peer;
     const aliceId = alice.state.playerId!;
 
+    bob.sendVoiceSignal(aliceId, { kind: 'ICE', data: { candidate: 'candidate-1' } });
+    await flush();
+
     const signals: Array<{ fromPlayerId: string; kind: string }> = [];
     alice.onVoiceSignal((fromPlayerId, signal) => signals.push({ fromPlayerId, kind: signal.kind }));
-    bob.sendVoiceSignal(aliceId, { kind: 'ICE', data: { candidate: 'candidate-1' } });
 
     const statuses: Array<{ playerId: string; enabled: boolean }> = [];
     host.onVoiceStatus((playerId, enabled) => statuses.push({ playerId, enabled }));
@@ -210,6 +212,21 @@ describe('NetworkHost + NetworkPeer over in-memory transport', () => {
     expect(statuses).toEqual([{ playerId: bob.state.playerId, enabled: true }]);
     expect(alice.state.voiceStatuses[bob.state.playerId!]).toBe(true);
     expect(controller.room.players).toHaveLength(3);
+  });
+
+  it('buffers voice signals addressed to the host until its voice room is ready', async () => {
+    const { controller, host, peers } = await createHostWithPeers(['Alice']);
+    const alice = peers[0]!.peer;
+    alice.sendVoiceSignal(controller.hostPlayerId, {
+      kind: 'OFFER',
+      data: { type: 'offer', sdp: 'm=audio 9 UDP/TLS/RTP/SAVPF 111' },
+    });
+    await flush();
+
+    const received: Array<{ fromPlayerId: string; kind: string }> = [];
+    host.onVoiceSignal((fromPlayerId, signal) => received.push({ fromPlayerId, kind: signal.kind }));
+
+    expect(received).toEqual([{ fromPlayerId: alice.state.playerId, kind: 'OFFER' }]);
   });
 
   it('rejects duplicate nicknames, full rooms, and started games', async () => {

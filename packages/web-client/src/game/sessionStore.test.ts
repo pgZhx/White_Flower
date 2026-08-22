@@ -9,9 +9,10 @@ import {
 describe('sessionStore', () => {
   beforeEach(() => {
     window.localStorage.clear();
+    window.sessionStorage.clear();
   });
 
-  it('remembers the last peer room so a peer refresh can restore without a URL room code', () => {
+  it('remembers the active peer room only for the current browser tab', () => {
     savePeerSession({
       roomId: 'ABC',
       role: 'peer',
@@ -27,5 +28,13 @@ describe('sessionStore', () => {
     clearPeerSession('ABC');
     expect(loadLastPeerRoom()).toBeNull();
     expect(loadPeerSession('ABC')).toBeNull();
+  });
+
+  it('ignores legacy last-room markers stored persistently', () => {
+    window.localStorage.setItem('white-flower:last-peer-room', 'STALE');
+    window.localStorage.setItem('white-flower:last-host-room', 'OLDHOST');
+
+    expect(loadLastPeerRoom()).toBeNull();
+    expect(window.localStorage.getItem('white-flower:last-peer-room')).toBeNull();
   });
 });

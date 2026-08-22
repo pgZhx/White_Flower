@@ -1,6 +1,12 @@
 import type { MultiplayerTransport, NetworkMessage, Unsubscribe } from './types.js';
 import type { RelayClientMessage, RelayServerMessage } from './relayProtocol.js';
 
+function transportError(code: string, message: string): Error {
+  const error = new Error(message);
+  (error as Error & { code?: string }).code = code;
+  return error;
+}
+
 export interface WebSocketRelayTransportOptions {
   role: 'host' | 'peer';
   roomId: string;
@@ -117,7 +123,7 @@ export class WebSocketRelayTransport implements MultiplayerTransport {
       ws.onclose = () => {
         cleanup();
         if (!this.settled) {
-          fail(new Error('WebSocket 连接已关闭'));
+          fail(transportError('SERVER_UNAVAILABLE', 'WebSocket 连接已关闭'));
           return;
         }
         // Only report the socket that is still the active transport. A newer
@@ -129,12 +135,12 @@ export class WebSocketRelayTransport implements MultiplayerTransport {
 
       ws.onerror = () => {
         if (!this.settled) {
-          fail(new Error('无法连接 Relay 服务'));
+          fail(transportError('SERVER_UNAVAILABLE', '无法连接 Relay 服务'));
         }
       };
 
       timeout = setTimeout(() => {
-        fail(new Error('连接超时，请确认网络或 Relay 服务可用。'));
+        fail(transportError('CONNECTION_TIMEOUT', '连接超时，请确认网络或 Relay 服务可用。'));
       }, this.options.connectTimeoutMs ?? 10000);
     });
   }

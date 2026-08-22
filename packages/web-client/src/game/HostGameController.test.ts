@@ -30,6 +30,26 @@ describe('HostGameController', () => {
     expect(controller.phase).toBe('INITIAL_COIN_PHASE');
   });
 
+  it('only lets the current coin holder choose the next crystal player', () => {
+    const controller = makeFivePlayerController();
+    for (const player of controller.room.players) controller.confirmIdentity(player.id);
+    for (const player of controller.room.players) controller.confirmIdentity(player.id);
+    while (controller.phase === 'FIRST_SPEAKING_PHASE') {
+      const speakerId = controller.getView(controller.hostPlayerId)!.voice.currentSpeakerId!;
+      controller.handleCommand({ type: 'END_SPEAKING', playerId: speakerId });
+    }
+
+    const view = controller.getView(controller.hostPlayerId)!;
+    const nonHolder = view.players.find((player) => player.id !== view.currentCoinHolderId)!;
+    const target = view.players.find((player) => player.id !== view.currentCoinHolderId && player.hasCrystal)!;
+    expect(() => controller.handleCommand({
+      type: 'SELECT_COIN_TARGET',
+      playerId: nonHolder.id,
+      targetId: target.id,
+    })).toThrow('只有当前金币持有人可以选择下一位水晶玩家');
+    expect(controller.phase).toBe('INITIAL_COIN_PHASE');
+  });
+
   it('can reset a running game back to the lobby', () => {
     const controller = makeFivePlayerController();
     expect(controller.phase).toBe('NIGHT_RECOGNITION');
@@ -124,7 +144,11 @@ describe('HostGameController full local game', () => {
       if (phase === 'ROUND_MAGIC_SELECT' || phase === 'INITIAL_COIN_PHASE') {
         const view = controller.getView(hostId)!;
         const target = view.players.find((p) => p.hasCrystal)!;
-        controller.handleCommand({ type: 'SELECT_COIN_TARGET', playerId: hostId, targetId: target.id });
+        controller.handleCommand({
+          type: 'SELECT_COIN_TARGET',
+          playerId: view.currentCoinHolderId!,
+          targetId: target.id,
+        });
         continue;
       }
 

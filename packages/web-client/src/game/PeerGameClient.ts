@@ -29,12 +29,12 @@ export class PeerGameClient implements GameClient {
     return this.networkPeer.subscribe(listener);
   }
 
-  async connect(nickname: string, playerId?: string): Promise<void> {
+  async connect(nickname: string, playerId?: string, timeoutMs = JOIN_TIMEOUT_MS): Promise<void> {
     await new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => {
         cleanup();
         reject(new Error('无法连接房主，请确认房间码正确、房主在线且网络正常。'));
-      }, JOIN_TIMEOUT_MS);
+      }, timeoutMs);
 
       const cleanup = () => {
         clearTimeout(timer);

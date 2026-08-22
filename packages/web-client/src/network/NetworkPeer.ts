@@ -26,6 +26,13 @@ export interface NetworkPeerState {
 }
 
 export type PeerCommand = Omit<GameCommand, 'playerId'>;
+const MAX_PENDING_VOICE_SIGNALS = 256;
+
+interface PendingVoiceSignal {
+  fromPlayerId: string;
+  toPlayerId: string;
+  signal: VoiceSignal;
+}
 
 export class NetworkPeer {
   state: NetworkPeerState = {
@@ -38,6 +45,8 @@ export class NetworkPeer {
 
   private listeners = new Set<() => void>();
   private voiceStatusHandlers = new Set<(playerId: string, enabled: boolean) => void>();
+  private voiceSignalHandlers = new Set<(fromPlayerId: string, signal: VoiceSignal) => void>();
+  private pendingVoiceSignals: PendingVoiceSignal[] = [];
   private readonly _sessionId: string;
 
   get sessionId(): string {
@@ -87,6 +96,7 @@ export class NetworkPeer {
       lastError: null,
       voiceStatuses: {},
     };
+    this.pendingVoiceSignals = [];
     await new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => {
         cleanup();
@@ -141,13 +151,14 @@ export class NetworkPeer {
   }
 
   onVoiceSignal(handler: (fromPlayerId: string, signal: VoiceSignal) => void): () => void {
-    const listener = (message: NetworkMessage) => {
-      if (message.type !== 'VOICE_SIGNAL') return;
-      const payload = message.payload;
-      if (payload.toPlayerId !== this.state.playerId) return;
-      handler(payload.fromPlayerId, payload.signal as VoiceSignal);
-    };
-    return this.transport.onMessage(listener);
+    this.voiceSignalHandlers.add(handler);
+    const pending = this.pendingVoiceSignals.splice(0);
+    for (const message of pending) {
+      if (message.toPlayerId === this.state.playerId) {
+        handler(message.fromPlayerId, message.signal);
+      }
+    }
+    return () => this.voiceSignalHandlers.delete(handler);
   }
 
   sendVoiceStatus(enabled: boolean): void {
@@ -205,6 +216,25 @@ export class NetworkPeer {
         view: viewMessage.payload.view as ClientView,
       };
       this.emit();
+      return;
+    }
+    if (message.type === 'VOICE_SIGNAL') {
+      const { fromPlayerId, toPlayerId, signal } = message.payload;
+      if (this.state.playerId && toPlayerId !== this.state.playerId) return;
+      if (!this.state.playerId || this.voiceSignalHandlers.size === 0) {
+        if (this.pendingVoiceSignals.length >= MAX_PENDING_VOICE_SIGNALS) {
+          this.pendingVoiceSignals.shift();
+        }
+        this.pendingVoiceSignals.push({
+          fromPlayerId,
+          toPlayerId,
+          signal: signal as VoiceSignal,
+        });
+        return;
+      }
+      for (const handler of this.voiceSignalHandlers) {
+        handler(fromPlayerId, signal as VoiceSignal);
+      }
       return;
     }
     if (message.type === 'VOICE_STATUS') {
