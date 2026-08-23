@@ -13,6 +13,7 @@ export type RelayClientMessage =
   | { kind: 'REGISTER_PEER'; roomId: string; clientId: string }
   | { kind: 'ROUTE_TO_HOST'; payload: unknown }
   | { kind: 'ROUTE_TO_PEER'; toPeerId: string; payload: unknown }
+  | { kind: 'DISCONNECT_PEER'; peerId: string }
   | { kind: 'BROADCAST'; payload: unknown };
 
 export type RelayServerMessage =

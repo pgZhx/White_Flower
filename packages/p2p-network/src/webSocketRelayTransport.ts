@@ -189,6 +189,11 @@ export class WebSocketRelayTransport implements MultiplayerTransport {
     };
   }
 
+  disconnectPeer(peerId: string): void {
+    if (this.options.role !== 'host') return;
+    this.sendEnvelope({ kind: 'DISCONNECT_PEER', peerId });
+  }
+
   async reconnect(): Promise<void> {
     this.manuallyClosed = false;
     this.settled = false;

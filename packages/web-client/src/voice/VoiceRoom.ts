@@ -18,7 +18,13 @@ interface VoiceConnection {
   peer: RTCPeerConnection;
   pendingCandidates: RTCIceCandidateInit[];
   localAudioTrackIds: Set<string>;
+  remoteTracks: Set<MediaStreamTrack>;
   makingOffer: boolean;
+  connectedAt: number;
+  lastInboundBytes: number | null;
+  lastInboundProgressAt: number;
+  lastOutboundBytes: number | null;
+  lastOutboundProgressAt: number;
 }
 
 export interface VoiceRoomOptions {
@@ -29,6 +35,8 @@ export interface VoiceRoomOptions {
 
 const DEFAULT_RECONNECT_BASE_DELAY_MS = 1000;
 const DEFAULT_RECONNECT_MAX_DELAY_MS = 15000;
+const MEDIA_HEALTH_INTERVAL_MS = 5000;
+const MEDIA_STALL_TIMEOUT_MS = 15000;
 
 export class VoiceRoom {
   private readonly connections = new Map<string, VoiceConnection>();
@@ -37,14 +45,22 @@ export class VoiceRoom {
   private readonly remoteAudios = new Map<string, HTMLAudioElement>();
   private readonly reconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly reconnectAttempts = new Map<string, number>();
+  private readonly remoteMuteTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly unsubSignal: () => void;
+  private readonly unsubManager: () => void;
   private readonly rtcConfiguration: RTCConfiguration;
   private readonly reconnectBaseDelayMs: number;
   private readonly reconnectMaxDelayMs: number;
+  private readonly healthTimer: ReturnType<typeof setInterval>;
+  private healthCheckRunning = false;
   private readonly unlockAudio = (): void => {
     for (const audio of this.remoteAudios.values()) {
       void this.playRemoteAudio(audio);
     }
+    void this.checkMediaHealth();
+  };
+  private readonly handleVisibilityChange = (): void => {
+    if (typeof document !== 'undefined' && document.visibilityState === 'visible') this.unlockAudio();
   };
   private destroyed = false;
 
@@ -60,8 +76,19 @@ export class VoiceRoom {
     this.unsubSignal = signaling.onVoiceSignal((fromPlayerId, signal) => {
       void this.handleSignal(fromPlayerId, signal);
     });
+    this.unsubManager = manager.subscribe(() => this.syncLocalAudioTrack());
+    this.healthTimer = setInterval(() => void this.checkMediaHealth(), MEDIA_HEALTH_INTERVAL_MS);
     if (typeof document !== 'undefined') {
       document.addEventListener('pointerdown', this.unlockAudio, { passive: true });
+      document.addEventListener('visibilitychange', this.handleVisibilityChange);
+    }
+  }
+
+  restartConnections(reason = 'voice connection refresh requested'): void {
+    if (this.destroyed) return;
+    for (const remotePlayerId of this.participants) {
+      this.clearReconnect(remotePlayerId, false);
+      this.scheduleReconnect(remotePlayerId, reason, 0);
     }
   }
 
@@ -91,17 +118,22 @@ export class VoiceRoom {
   destroy(): void {
     this.destroyed = true;
     this.unsubSignal();
+    this.unsubManager();
+    clearInterval(this.healthTimer);
     if (typeof document !== 'undefined') {
       document.removeEventListener('pointerdown', this.unlockAudio);
+      document.removeEventListener('visibilitychange', this.handleVisibilityChange);
     }
     for (const id of this.connections.keys()) this.closeConnection(id);
     for (const timer of this.reconnectTimers.values()) clearTimeout(timer);
+    for (const timer of this.remoteMuteTimers.values()) clearTimeout(timer);
     this.connections.clear();
     this.participants.clear();
     this.remoteStreams.clear();
     this.remoteAudios.clear();
     this.reconnectTimers.clear();
     this.reconnectAttempts.clear();
+    this.remoteMuteTimers.clear();
   }
 
   private ensureConnection(remotePlayerId: string): VoiceConnection | null {
@@ -115,7 +147,13 @@ export class VoiceRoom {
       peer,
       pendingCandidates: [],
       localAudioTrackIds: new Set(localAudioTracks.map((track) => track.id)),
+      remoteTracks: new Set(),
       makingOffer: false,
+      connectedAt: Date.now(),
+      lastInboundBytes: null,
+      lastInboundProgressAt: Date.now(),
+      lastOutboundBytes: null,
+      lastOutboundProgressAt: Date.now(),
     };
     this.connections.set(remotePlayerId, connection);
     this.logConnection('[create peer connection]', remotePlayerId, peer);
@@ -138,7 +176,9 @@ export class VoiceRoom {
       this.sendSignal(remotePlayerId, { kind: 'ICE', data: event.candidate.toJSON() });
     };
     peer.ontrack = (event) => {
+      if (this.connections.get(remotePlayerId)?.peer !== peer) return;
       const remoteStream = event.streams[0] ?? new MediaStream([event.track]);
+      this.watchRemoteTrack(remotePlayerId, connection, event.track);
       console.log('[receive remote track]', {
         playerId: this.playerId,
         remotePlayerId,
@@ -151,6 +191,9 @@ export class VoiceRoom {
     peer.onconnectionstatechange = () => {
       this.logConnection('[connection state]', remotePlayerId, peer);
       if (peer.connectionState === 'connected') {
+        connection.connectedAt = Date.now();
+        connection.lastInboundProgressAt = connection.connectedAt;
+        connection.lastOutboundProgressAt = connection.connectedAt;
         this.clearReconnect(remotePlayerId, true);
       } else if (peer.connectionState === 'failed') {
         this.scheduleReconnect(remotePlayerId, 'peer connection failed', 250);
@@ -258,6 +301,168 @@ export class VoiceRoom {
     for (const candidate of candidates) await connection.peer.addIceCandidate(candidate);
   }
 
+  private syncLocalAudioTrack(): void {
+    const stream = this.manager.localStream;
+    const track = stream?.getAudioTracks().find((item) => item.readyState === 'live');
+    if (!stream || !track) return;
+
+    for (const [remotePlayerId, connection] of this.connections) {
+      const sender = connection.peer.getSenders().find((item) => item.track?.kind === 'audio');
+      if (sender?.track?.id === track.id) continue;
+      if (!sender) {
+        connection.peer.addTrack(track, stream);
+        connection.localAudioTrackIds = new Set([track.id]);
+        if (this.playerId < remotePlayerId) {
+          void this.createOffer(remotePlayerId, connection);
+        } else {
+          this.sendSignal(remotePlayerId, { kind: 'RESTART' });
+        }
+        continue;
+      }
+      void sender.replaceTrack(track).then(() => {
+        connection.localAudioTrackIds = new Set([track.id]);
+        connection.lastOutboundBytes = null;
+        connection.lastOutboundProgressAt = Date.now();
+        console.log('[voice] replaced ended local microphone track', {
+          playerId: this.playerId,
+          remotePlayerId,
+          trackId: track.id,
+        });
+      }).catch((error) => {
+        console.warn('[voice] failed to replace local microphone track', {
+          playerId: this.playerId,
+          remotePlayerId,
+          error,
+        });
+        this.scheduleReconnect(remotePlayerId, 'local microphone replacement failed', 250);
+      });
+    }
+  }
+
+  private watchRemoteTrack(
+    remotePlayerId: string,
+    connection: VoiceConnection,
+    track: MediaStreamTrack,
+  ): void {
+    connection.remoteTracks.add(track);
+    const timerKey = `${remotePlayerId}:${track.id}`;
+    track.onended = () => {
+      this.clearRemoteMuteTimer(timerKey);
+      if (this.connections.get(remotePlayerId) === connection) {
+        this.scheduleReconnect(remotePlayerId, 'remote audio track ended', 250);
+      }
+    };
+    track.onmute = () => {
+      this.clearRemoteMuteTimer(timerKey);
+      const timer = setTimeout(() => {
+        this.remoteMuteTimers.delete(timerKey);
+        if (track.muted && track.readyState === 'live' && this.connections.get(remotePlayerId) === connection) {
+          this.scheduleReconnect(remotePlayerId, 'remote audio track stayed muted');
+        }
+      }, MEDIA_STALL_TIMEOUT_MS);
+      this.remoteMuteTimers.set(timerKey, timer);
+    };
+    track.onunmute = () => {
+      this.clearRemoteMuteTimer(timerKey);
+      connection.lastInboundProgressAt = Date.now();
+    };
+  }
+
+  private clearRemoteMuteTimer(timerKey: string): void {
+    const timer = this.remoteMuteTimers.get(timerKey);
+    if (timer) clearTimeout(timer);
+    this.remoteMuteTimers.delete(timerKey);
+  }
+
+  private async checkMediaHealth(): Promise<void> {
+    if (this.destroyed || this.healthCheckRunning) return;
+    this.healthCheckRunning = true;
+    try {
+      for (const audio of this.remoteAudios.values()) {
+        if (audio.paused && (typeof document === 'undefined' || document.visibilityState === 'visible')) {
+          void this.playRemoteAudio(audio);
+        }
+      }
+      await Promise.all([...this.connections].map(([remotePlayerId, connection]) => (
+        this.checkConnectionMedia(remotePlayerId, connection)
+      )));
+    } finally {
+      this.healthCheckRunning = false;
+    }
+  }
+
+  private async checkConnectionMedia(remotePlayerId: string, connection: VoiceConnection): Promise<void> {
+    const peer = connection.peer;
+    if (
+      this.connections.get(remotePlayerId) !== connection
+      || peer.connectionState !== 'connected'
+      || typeof peer.getStats !== 'function'
+    ) return;
+
+    try {
+      const stats = await peer.getStats();
+      let inboundBytes = 0;
+      let outboundBytes = 0;
+      let inboundAudioFound = false;
+      let outboundAudioFound = false;
+      stats.forEach((report) => {
+        const item = report as RTCStats & {
+          kind?: string;
+          mediaType?: string;
+          bytesReceived?: number;
+          bytesSent?: number;
+          isRemote?: boolean;
+        };
+        const isAudio = item.kind === 'audio' || item.mediaType === 'audio';
+        if (!isAudio || item.isRemote) return;
+        if (item.type === 'inbound-rtp') {
+          inboundAudioFound = true;
+          inboundBytes += item.bytesReceived ?? 0;
+        } else if (item.type === 'outbound-rtp') {
+          outboundAudioFound = true;
+          outboundBytes += item.bytesSent ?? 0;
+        }
+      });
+
+      const now = Date.now();
+      if (inboundAudioFound && (connection.lastInboundBytes === null || inboundBytes > connection.lastInboundBytes)) {
+        connection.lastInboundProgressAt = now;
+      }
+      connection.lastInboundBytes = inboundAudioFound ? inboundBytes : connection.lastInboundBytes;
+
+      if (
+        now - connection.connectedAt >= MEDIA_STALL_TIMEOUT_MS
+        && now - connection.lastInboundProgressAt >= MEDIA_STALL_TIMEOUT_MS
+      ) {
+        this.scheduleReconnect(remotePlayerId, 'inbound audio stopped progressing');
+        return;
+      }
+
+      if (!this.manager.isEffectivelyEnabled) {
+        connection.lastOutboundBytes = null;
+        connection.lastOutboundProgressAt = now;
+        return;
+      }
+      if (outboundAudioFound && (connection.lastOutboundBytes === null || outboundBytes > connection.lastOutboundBytes)) {
+        connection.lastOutboundProgressAt = now;
+      }
+      connection.lastOutboundBytes = outboundAudioFound ? outboundBytes : connection.lastOutboundBytes;
+      if (
+        now - connection.connectedAt >= MEDIA_STALL_TIMEOUT_MS
+        && now - connection.lastOutboundProgressAt >= MEDIA_STALL_TIMEOUT_MS
+      ) {
+        await this.manager.ensureLiveMicrophone();
+        this.scheduleReconnect(remotePlayerId, 'outbound audio stopped progressing');
+      }
+    } catch (error) {
+      console.warn('[voice] failed to inspect WebRTC audio statistics', {
+        playerId: this.playerId,
+        remotePlayerId,
+        error,
+      });
+    }
+  }
+
   private attachAudio(remotePlayerId: string, stream: MediaStream): void {
     const connection = this.connections.get(remotePlayerId);
     if (!connection || typeof Audio === 'undefined') return;
@@ -265,7 +470,13 @@ export class VoiceRoom {
     this.stopRemoteAudio(remotePlayerId);
     const audio = new Audio();
     audio.autoplay = true;
+    audio.muted = false;
+    audio.volume = 1;
     audio.srcObject = stream;
+    audio.setAttribute('playsinline', '');
+    audio.setAttribute('aria-hidden', 'true');
+    audio.style.display = 'none';
+    if (typeof document !== 'undefined') document.body.appendChild(audio);
     this.remoteAudios.set(remotePlayerId, audio);
     console.log('[remote audio created]', {
       playerId: this.playerId,
@@ -292,6 +503,13 @@ export class VoiceRoom {
     connection.peer.onconnectionstatechange = null;
     connection.peer.oniceconnectionstatechange = null;
     connection.peer.onsignalingstatechange = null;
+    for (const track of connection.remoteTracks) {
+      this.clearRemoteMuteTimer(`${remotePlayerId}:${track.id}`);
+      track.onended = null;
+      track.onmute = null;
+      track.onunmute = null;
+    }
+    connection.remoteTracks.clear();
     connection.peer.close();
     this.stopRemoteAudio(remotePlayerId);
     this.remoteStreams.delete(remotePlayerId);

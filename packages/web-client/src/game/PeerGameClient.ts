@@ -47,7 +47,11 @@ export class PeerGameClient implements GameClient {
           resolve();
         } else if (this.networkPeer.state.lastError) {
           cleanup();
-          reject(new Error(this.networkPeer.state.lastError));
+          const error = new Error(this.networkPeer.state.lastError);
+          if (this.networkPeer.state.lastErrorCode) {
+            (error as Error & { code?: string }).code = this.networkPeer.state.lastErrorCode;
+          }
+          reject(error);
         }
       });
 
@@ -88,6 +92,10 @@ export class PeerGameClient implements GameClient {
 
   setReady(ready: boolean): void {
     this.networkPeer.setReady(ready);
+  }
+
+  kickPlayer(_playerId: string): void {
+    throw new Error('只有房主可以移出玩家');
   }
 
   handleCommand(command: GameCommand): void {
@@ -161,6 +169,10 @@ export class PeerGameClient implements GameClient {
 
   get lastError(): string | null {
     return this.networkPeer.state.lastError;
+  }
+
+  get lastErrorCode(): string | null {
+    return this.networkPeer.state.lastErrorCode;
   }
 
   disconnect(): void {

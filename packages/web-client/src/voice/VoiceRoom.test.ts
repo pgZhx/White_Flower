@@ -27,14 +27,19 @@ class FakePeerConnection {
   onconnectionstatechange: (() => void) | null = null;
   oniceconnectionstatechange: (() => void) | null = null;
   onsignalingstatechange: (() => void) | null = null;
-  readonly senders: Array<{ track: MediaStreamTrack | null }> = [];
+  readonly senders: Array<{ track: MediaStreamTrack | null; replaceTrack: (track: MediaStreamTrack | null) => Promise<void> }> = [];
 
   constructor() {
     FakePeerConnection.instances.push(this);
   }
 
   addTrack(track: MediaStreamTrack): RTCRtpSender {
-    const sender = { track };
+    const sender = {
+      track,
+      replaceTrack: vi.fn(async (nextTrack: MediaStreamTrack | null) => {
+        sender.track = nextTrack as MediaStreamTrack;
+      }),
+    };
     this.senders.push(sender);
     return sender as unknown as RTCRtpSender;
   }
@@ -44,7 +49,7 @@ class FakePeerConnection {
   }
 
   removeTrack(sender: RTCRtpSender): void {
-    const index = this.senders.indexOf(sender as unknown as { track: MediaStreamTrack | null });
+    const index = this.senders.indexOf(sender as unknown as typeof this.senders[number]);
     if (index >= 0) this.senders.splice(index, 1);
   }
 
@@ -69,6 +74,25 @@ class FakePeerConnection {
     return Promise.resolve();
   }
 
+  getStats(): Promise<RTCStatsReport> {
+    return Promise.resolve(new Map([
+      ['inbound-audio', {
+        id: 'inbound-audio',
+        timestamp: Date.now(),
+        type: 'inbound-rtp',
+        kind: 'audio',
+        bytesReceived: 100,
+      }],
+      ['outbound-audio', {
+        id: 'outbound-audio',
+        timestamp: Date.now(),
+        type: 'outbound-rtp',
+        kind: 'audio',
+        bytesSent: 100,
+      }],
+    ]) as unknown as RTCStatsReport);
+  }
+
   close(): void {
     this.connectionState = 'closed';
   }
@@ -85,7 +109,36 @@ function createSignaling(): VoiceSignaling {
 
 function createManager(playerId: string): VoiceManager {
   const track = localTrack(`${playerId}-microphone`);
-  return { localStream: localStream(`${playerId}-local`, track) } as unknown as VoiceManager;
+  return {
+    localStream: localStream(`${playerId}-local`, track),
+    isEffectivelyEnabled: true,
+    subscribe: () => () => undefined,
+    ensureLiveMicrophone: () => Promise.resolve(true),
+  } as unknown as VoiceManager;
+}
+
+function createMutableManager(playerId: string): {
+  manager: VoiceManager;
+  replaceMicrophone(trackId: string): void;
+} {
+  let listener: (() => void) | null = null;
+  let stream = localStream(`${playerId}-local`, localTrack(`${playerId}-microphone`));
+  const manager = {
+    get localStream() { return stream; },
+    isEffectivelyEnabled: true,
+    subscribe: (nextListener: () => void) => {
+      listener = nextListener;
+      return () => { listener = null; };
+    },
+    ensureLiveMicrophone: () => Promise.resolve(true),
+  } as unknown as VoiceManager;
+  return {
+    manager,
+    replaceMicrophone(trackId: string) {
+      stream = localStream(`${playerId}-replacement`, localTrack(trackId));
+      listener?.();
+    },
+  };
 }
 
 describe('VoiceRoom peer topology', () => {
@@ -130,6 +183,40 @@ describe('VoiceRoom peer topology', () => {
     expect(FakePeerConnection.instances).toHaveLength(2);
     expect(FakePeerConnection.instances[1]?.senders).toHaveLength(1);
     expect(signaling.sendVoiceSignal).toHaveBeenCalledWith('B', expect.objectContaining({ kind: 'OFFER' }));
+    room.destroy();
+  });
+
+  it('replaces every sender track when the browser reacquires the microphone', async () => {
+    vi.stubGlobal('RTCPeerConnection', FakePeerConnection);
+    const mutable = createMutableManager('A');
+    const room = new VoiceRoom('A', mutable.manager, createSignaling());
+    room.updateParticipants(['A', 'B', 'C']);
+
+    mutable.replaceMicrophone('A-new-microphone');
+    await Promise.resolve();
+
+    expect(FakePeerConnection.instances).toHaveLength(2);
+    expect(FakePeerConnection.instances.every(
+      (peer) => peer.senders[0]?.track?.id === 'A-new-microphone',
+    )).toBe(true);
+    room.destroy();
+  });
+
+  it('rebuilds a connected peer whose RTP audio stops progressing', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('RTCPeerConnection', FakePeerConnection);
+    const room = new VoiceRoom('A', createManager('A'), createSignaling(), {
+      reconnectBaseDelayMs: 1,
+      reconnectMaxDelayMs: 1,
+    });
+    room.updateParticipants(['A', 'B']);
+    const first = FakePeerConnection.instances[0]!;
+    first.connectionState = 'connected';
+    first.onconnectionstatechange?.();
+
+    await vi.advanceTimersByTimeAsync(21000);
+
+    expect(FakePeerConnection.instances.length).toBeGreaterThan(1);
     room.destroy();
   });
 });

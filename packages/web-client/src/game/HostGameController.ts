@@ -126,9 +126,12 @@ export class HostGameController {
   }
 
   removePlayer(playerId: string): void {
+    const players = this.room.players
+      .filter((p) => p.id !== playerId)
+      .map((player, seat) => ({ ...player, seat }));
     this.room = {
       ...this.room,
-      players: this.room.players.filter((p) => p.id !== playerId),
+      players,
     };
     this.emit();
   }

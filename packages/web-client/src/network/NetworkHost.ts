@@ -119,6 +119,46 @@ export class NetworkHost {
     this.transport.broadcast(message);
   }
 
+  kickPlayer(playerId: string): void {
+    if (this.controller.room.status !== 'LOBBY') {
+      throw new Error('只能在房间等待阶段移出玩家');
+    }
+    if (playerId === this.controller.hostPlayerId) {
+      throw new Error('房主不能移出自己');
+    }
+    const player = this.controller.room.players.find((item) => item.id === playerId);
+    if (!player) return;
+
+    const peerId = this.playerToPeer.get(playerId);
+    if (peerId) {
+      this.sendError(peerId, 'KICKED', '你已被房主移出房间。');
+    }
+    this.removePlayerConnection(playerId, peerId);
+    this.controller.removePlayer(playerId);
+    this.broadcastAll();
+    if (peerId && player.connected) {
+      this.transport.disconnectPeer?.(peerId);
+    }
+  }
+
+  private removePlayerConnection(playerId: string, peerId?: string): void {
+    const resolvedPeerId = peerId ?? this.playerToPeer.get(playerId);
+    if (resolvedPeerId) {
+      const timer = this.disconnectTimers.get(resolvedPeerId);
+      if (timer) clearTimeout(timer);
+      this.disconnectTimers.delete(resolvedPeerId);
+      this.peerToPlayer.delete(resolvedPeerId);
+      this.peerSessions.delete(resolvedPeerId);
+    }
+    this.playerToPeer.delete(playerId);
+    this.voiceStatuses.delete(playerId);
+    for (let index = this.pendingVoiceSignals.length - 1; index >= 0; index -= 1) {
+      if (this.pendingVoiceSignals[index]?.fromPlayerId === playerId) {
+        this.pendingVoiceSignals.splice(index, 1);
+      }
+    }
+  }
+
   private handleVoiceSignal(message: VoiceSignalMessage, fromPeerId?: string): void {
     const fromPlayerId = fromPeerId ? this.peerToPlayer.get(fromPeerId) : undefined;
     const targetId = message.payload.toPlayerId;
@@ -179,10 +219,6 @@ export class NetworkHost {
       this.sendError(peerId ?? '', 'PROTOCOL_MISMATCH', '缺少 Peer 标识');
       return;
     }
-    if (this.controller.room.players.length >= 10) {
-      this.sendError(peerId, 'ROOM_FULL', '房间已满');
-      return;
-    }
     const nickname = message.nickname?.trim();
     if (!nickname || !NICKNAME_PATTERN.test(nickname)) {
       this.sendError(peerId, 'INVALID_NICKNAME', '昵称不合法（1-16 位且不含空格）');
@@ -229,10 +265,8 @@ export class NetworkHost {
         clearTimeout(timer);
         this.disconnectTimers.delete(peerId);
       }
+      this.removePlayerConnection(existingPlayerId, peerId);
       this.controller.removePlayer(existingPlayerId);
-      this.peerToPlayer.delete(peerId);
-      this.playerToPeer.delete(existingPlayerId);
-      this.peerSessions.delete(peerId);
     }
 
     // If a returning player supplies their old playerId (stored locally before a
@@ -272,6 +306,10 @@ export class NetworkHost {
     }
     if (this.controller.room.status !== 'LOBBY') {
       this.sendError(peerId, 'GAME_ALREADY_STARTED', '游戏已经开始，无法加入');
+      return;
+    }
+    if (this.controller.room.players.length >= 10) {
+      this.sendError(peerId, 'ROOM_FULL', '房间已满');
       return;
     }
 
@@ -351,10 +389,8 @@ export class NetworkHost {
         this.disconnectTimers.delete(peerId);
         const player = this.controller.room.players.find((p) => p.id === playerId);
         if (!player || player.connected) return;
+        this.removePlayerConnection(playerId, peerId);
         this.controller.removePlayer(playerId);
-        this.peerToPlayer.delete(peerId);
-        this.playerToPeer.delete(playerId);
-        this.peerSessions.delete(peerId);
         this.broadcastAll();
       }, 60_000);
       this.disconnectTimers.set(peerId, timer);

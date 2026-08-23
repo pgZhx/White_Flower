@@ -55,6 +55,9 @@ function handleMessage(ws, raw) {
     case 'ROUTE_TO_PEER':
       handleRouteToPeer(ws, message);
       return;
+    case 'DISCONNECT_PEER':
+      handleDisconnectPeer(ws, message);
+      return;
     case 'BROADCAST':
       handleBroadcast(ws, message);
       return;
@@ -76,8 +79,29 @@ function handleRegisterHost(ws, message) {
     return;
   }
 
-  if (rooms.has(roomId)) {
-    sendError(ws, 'ROOM_EXISTS', '房间已存在，请重新创建房间');
+  const existingRoom = rooms.get(roomId);
+  if (existingRoom) {
+    if (existingRoom.hostClientId !== clientId) {
+      sendError(ws, 'ROOM_EXISTS', '房间已存在，请重新创建房间');
+      return;
+    }
+
+    // A page refresh reuses the saved host client id. Replace the stale host
+    // socket atomically so its later close event cannot delete the restored room.
+    const previousHostSocket = existingRoom.hostSocket;
+    existingRoom.hostSocket = ws;
+    socketMeta.set(ws, { roomId, clientId, role: 'host' });
+    sendJson(ws, { kind: 'REGISTERED', role: 'host', roomId, clientId });
+
+    // Peers must re-register with the restored NetworkHost so its in-memory
+    // peer-to-player mapping is rebuilt from their saved player ids.
+    for (const peerSocket of existingRoom.peers.values()) {
+      sendJson(peerSocket, { kind: 'HOST_DISCONNECTED', message: '房主正在刷新，正在重新连接…' });
+      peerSocket.close();
+    }
+    existingRoom.peers.clear();
+    if (previousHostSocket !== ws && isOpen(previousHostSocket)) previousHostSocket.close();
+    console.log(`host restored room=${roomId} client=${clientId}`);
     return;
   }
 
@@ -191,6 +215,21 @@ function handleRouteToPeer(ws, message) {
   });
 }
 
+function handleDisconnectPeer(ws, message) {
+  const meta = socketMeta.get(ws);
+  if (!meta || meta.role !== 'host') {
+    sendError(ws, 'NOT_HOST', '只有 Host 可以断开 Peer');
+    return;
+  }
+
+  const peerId = typeof message.peerId === 'string' ? message.peerId : '';
+  const room = rooms.get(meta.roomId);
+  const target = room?.peers.get(peerId);
+  if (!room || !target) return;
+  room.peers.delete(peerId);
+  target.close();
+}
+
 function handleBroadcast(ws, message) {
   const meta = socketMeta.get(ws);
   if (!meta) {
@@ -224,6 +263,8 @@ function handleClose(ws) {
   if (!room) return;
 
   if (meta.role === 'host') {
+    // A refreshed host may already have replaced this socket.
+    if (room.hostSocket !== ws) return;
     for (const peerSocket of room.peers.values()) {
       sendJson(peerSocket, { kind: 'HOST_DISCONNECTED', message: '房主已离开。当前对局无法继续。' });
       peerSocket.close();

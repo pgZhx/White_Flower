@@ -1,0 +1,19 @@
+# Install as /etc/turnserver.conf after replacing the example values.
+listening-port=3478
+listening-ip=PRIVATE_SERVER_IP
+relay-ip=PRIVATE_SERVER_IP
+external-ip=PUBLIC_SERVER_IP/PRIVATE_SERVER_IP
+min-port=49160
+max-port=49200
+fingerprint
+lt-cred-mech
+realm=white-flower
+user=TURN_USERNAME:TURN_STRONG_CREDENTIAL
+stale-nonce=600
+no-cli
+no-tls
+no-dtls
+no-multicast-peers
+no-loopback-peers
+total-quota=100
+user-quota=20

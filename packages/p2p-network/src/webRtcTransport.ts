@@ -166,6 +166,13 @@ export class WebRtcTransport implements MultiplayerTransport {
     };
   }
 
+  disconnectPeer(peerId: string): void {
+    if (this.options.role !== 'host') return;
+    const connection = this.connections.get(peerId);
+    this.connections.delete(peerId);
+    connection?.close();
+  }
+
   disconnect(): void {
     for (const conn of this.connections.values()) {
       conn.close();

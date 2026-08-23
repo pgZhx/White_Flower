@@ -153,5 +153,6 @@ export interface MultiplayerTransport {
   onMessage(handler: (message: NetworkMessage, fromPeerId?: string) => void): Unsubscribe;
   onPeerConnected(handler: (peerId: string) => void): Unsubscribe;
   onPeerDisconnected(handler: (peerId: string) => void): Unsubscribe;
+  disconnectPeer?(peerId: string): void;
   disconnect(): void;
 }

@@ -64,6 +64,10 @@ export class HostGameClient implements GameClient {
     this.controller.setReady(this.controller.hostPlayerId, ready);
   }
 
+  kickPlayer(playerId: string): void {
+    this.networkHost.kickPlayer(playerId);
+  }
+
   handleCommand(command: GameCommand): void {
     this.controller.handleCommand(command);
   }
@@ -112,6 +116,10 @@ export class HostGameClient implements GameClient {
 
   get lastError(): string | null {
     return this.transportLost ? '网络连接已断开，正在尝试重连…' : null;
+  }
+
+  get lastErrorCode(): string | null {
+    return this.transportLost ? 'CONNECTION_LOST' : null;
   }
 
   async reconnect(): Promise<void> {

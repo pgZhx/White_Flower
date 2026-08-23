@@ -283,4 +283,53 @@ describe('NetworkHost + NetworkPeer over in-memory transport', () => {
     expect(controller.room.players.map((p) => p.nickname)).toEqual(['Host', 'Alice', 'Bob']);
     expect(controller.room.players.find((p) => p.nickname === 'Alice')?.connected).toBe(false);
   });
+
+  it('restores a saved player seat even when the room already has ten players', async () => {
+    const hub = createHub();
+    const hostTransport = new TestTransport('host-full-restore', hub);
+    const controller = new HostGameController({ roomId: 'FULLRESTORE', hostPlayerId: 'host-player', seed: 7 });
+    controller.addPlayer('Host');
+    for (let index = 0; index < 8; index += 1) controller.addPlayer(`Local${index + 1}`);
+    new NetworkHost(controller, hostTransport);
+
+    const originalTransport = new TestTransport('peer-original', hub, 'host-full-restore');
+    const originalPeer = new NetworkPeer(originalTransport, 'peer-original');
+    originalPeer.join('FULLRESTORE', 'Alice');
+    await flush();
+    const savedPlayerId = originalPeer.state.playerId!;
+    expect(controller.room.players).toHaveLength(10);
+
+    hostTransport.emitPeerDisconnected('peer-original');
+    const restoredTransport = new TestTransport('peer-restored', hub, 'host-full-restore');
+    const restoredPeer = new NetworkPeer(restoredTransport, 'peer-restored');
+    restoredPeer.join('FULLRESTORE', 'Alice', savedPlayerId);
+    await flush();
+
+    expect(restoredPeer.state.playerId).toBe(savedPlayerId);
+    expect(restoredPeer.state.lastError).toBeNull();
+    expect(controller.room.players).toHaveLength(10);
+    expect(controller.room.players.find((player) => player.id === savedPlayerId)?.connected).toBe(true);
+  });
+
+  it('lets the host remove a player and immediately releases the nickname', async () => {
+    const { hub, host, controller, peers } = await createHostWithPeers(['Alice', 'Bob']);
+    const alice = peers[0]!.peer;
+    const alicePlayerId = alice.state.playerId!;
+
+    host.kickPlayer(alicePlayerId);
+    await flush();
+
+    expect(alice.state.lastErrorCode).toBe('KICKED');
+    expect(alice.state.lastError).toBe('你已被房主移出房间。');
+    expect(controller.room.players.map((player) => player.nickname)).toEqual(['Host', 'Bob']);
+    expect(controller.room.players.map((player) => player.seat)).toEqual([0, 1]);
+
+    const replacementTransport = new TestTransport('peer-replacement', hub, 'host');
+    const replacement = new NetworkPeer(replacementTransport, 'peer-replacement');
+    replacement.join('ROOM1', 'Alice');
+    await flush();
+
+    expect(replacement.state.playerId).toBeTruthy();
+    expect(replacement.state.lastError).toBeNull();
+  });
 });

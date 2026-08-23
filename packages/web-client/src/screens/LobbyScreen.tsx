@@ -75,6 +75,12 @@ export function LobbyScreen({
     }
   };
 
+  const kickPlayer = (id: string, playerNickname: string, connected: boolean) => {
+    if (!client?.isHost || id === client.playerId) return;
+    if (connected && !window.confirm(`确定要将“${playerNickname}”移出房间吗？`)) return;
+    client.kickPlayer(id);
+  };
+
   return (
     <div className="min-h-screen bg-cathedral px-4 py-8">
       <div className="mx-auto max-w-2xl rounded-lg border border-stone-700 bg-stone-900 p-6">
@@ -140,6 +146,14 @@ export function LobbyScreen({
                     onClick={() => toggleReady(player.id)}
                   >
                     {player.ready ? '取消准备' : '准备'}
+                  </button>
+                )}
+                {isHost && player.id !== playerId && (
+                  <button
+                    className="rounded border border-red-800 px-2 py-1 text-xs text-red-300 hover:bg-red-950"
+                    onClick={() => kickPlayer(player.id, player.nickname, player.connected)}
+                  >
+                    {player.connected ? '踢出' : '清理'}
                   </button>
                 )}
                 <span className={player.ready ? 'text-green-400' : 'text-stone-500'}>

@@ -37,7 +37,11 @@ export type Screen =
   | { name: 'connecting'; message: string }
   | { name: 'lobby'; roomId: string; nickname: string; playerId: string; isHost: boolean }
   | { name: 'game'; roomId: string; nickname: string; playerId: string; isHost: boolean }
-  | { name: 'error'; message: string };
+  | {
+      name: 'error';
+      message: string;
+      restore?: { role: 'host' | 'peer'; roomId: string };
+    };
 
 function readRoomParam(): string | null {
   const params = new URLSearchParams(window.location.search);
@@ -88,7 +92,19 @@ function isRoomExists(error: unknown): boolean {
 
 function isRetryableRelayError(error: unknown): boolean {
   const code = errorCode(error);
-  return code === 'ROOM_NOT_FOUND' || code === 'SERVER_UNAVAILABLE' || code === 'CONNECTION_TIMEOUT';
+  return code === 'ROOM_NOT_FOUND'
+    || code === 'HOST_OFFLINE'
+    || code === 'HOST_DISCONNECTED'
+    || code === 'SERVER_UNAVAILABLE'
+    || code === 'CONNECTION_TIMEOUT';
+}
+
+function isReconnectableClientError(code: string | null): boolean {
+  return code === 'CONNECTION_LOST'
+    || code === 'HOST_DISCONNECTED'
+    || code === 'HOST_OFFLINE'
+    || code === 'SERVER_UNAVAILABLE'
+    || code === 'CONNECTION_TIMEOUT';
 }
 
 
@@ -261,10 +277,12 @@ export default function App() {
   const [screen, setScreen] = useState<Screen>({ name: 'home' });
   const [initialRoom, setInitialRoom] = useState<string | null>(null);
   const [roomParamReady, setRoomParamReady] = useState(false);
+  const [restoreAttempt, setRestoreAttempt] = useState(0);
   const [client, setClient] = useState<GameClient | null>(null);
   const [voiceController, setVoiceController] = useState<VoiceController | null>(null);
   const debugMode = useMemo(isDebugMode, []);
   const reconnectingRef = useRef(false);
+  const kickedRef = useRef(false);
   const voiceRoomRef = useRef<VoiceRoom | null>(null);
   const voiceControllerRef = useRef<VoiceController | null>(null);
 
@@ -301,12 +319,28 @@ export default function App() {
           saveHostSession(saved.session, client.controller.snapshot());
         }
       }
-      if (client.lastError && !reconnectingRef.current) {
+      if (client.lastErrorCode === 'KICKED' && !kickedRef.current) {
+        kickedRef.current = true;
+        window.setTimeout(() => {
+          const roomId = client.roomId;
+          client.disconnect();
+          clearRoomSession(roomId);
+          setClient(null);
+          setScreen({ name: 'error', message: '你已被房主移出房间。' });
+          kickedRef.current = false;
+        }, 0);
+        return;
+      }
+      if (kickedRef.current) return;
+      if (client.lastError && isReconnectableClientError(client.lastErrorCode) && !reconnectingRef.current) {
         reconnectingRef.current = true;
         window.setTimeout(() => {
-          void client.reconnect?.().catch(() => undefined).finally(() => {
-            reconnectingRef.current = false;
-          });
+          void client.reconnect?.()
+            .then(() => voiceRoomRef.current?.restartConnections('game signaling reconnected'))
+            .catch(() => undefined)
+            .finally(() => {
+              reconnectingRef.current = false;
+            });
         }, 800);
       }
       const currentView = client.getView();
@@ -407,7 +441,7 @@ export default function App() {
         nickname,
         normalizedRoomId,
         savedSession,
-        autoRestore ? { maxAttempts: 1, timeoutMs: 3000 } : {},
+        autoRestore ? { maxAttempts: 5, timeoutMs: 5000 } : {},
       );
       savePeerSession({
         roomId: normalizedRoomId,
@@ -438,8 +472,11 @@ export default function App() {
       );
     } catch (error) {
       if (autoRestore) {
-        clearRoomSession(normalizedRoomId);
-        setScreen({ name: 'home' });
+        setScreen({
+          name: 'error',
+          message: `未能恢复房间 ${normalizedRoomId}：${errorMessage(error)}`,
+          restore: { role: 'peer', roomId: normalizedRoomId },
+        });
       } else {
         setScreen({ name: 'error', message: errorMessage(error) });
       }
@@ -507,7 +544,7 @@ export default function App() {
           const { client: hostClient } = await restoreHostClient(
             hostSaved.session,
             hostSaved.snapshot,
-            { maxAttempts: 1, timeoutMs: 3000 },
+            { maxAttempts: 5, timeoutMs: 5000 },
           );
           if (cancelled) {
             hostClient.disconnect();
@@ -532,10 +569,13 @@ export default function App() {
                   isHost: true,
                 },
           );
-        } catch {
+        } catch (error) {
           if (!cancelled) {
-            clearRoomSession(roomToRestore);
-            setScreen({ name: 'home' });
+            setScreen({
+              name: 'error',
+              message: `未能恢复房间 ${roomToRestore}：${errorMessage(error)}`,
+              restore: { role: 'host', roomId: roomToRestore },
+            });
           }
         }
         return;
@@ -551,7 +591,7 @@ export default function App() {
     // Intentionally run only when the room parameter or debug mode changes; the
     // screen/client guards prevent duplicate restores.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialRoom, roomParamReady, debugMode]);
+  }, [initialRoom, roomParamReady, debugMode, restoreAttempt]);
 
   if (screen.name === 'home') {
     return (
@@ -573,12 +613,28 @@ export default function App() {
         <div className="w-full max-w-md rounded-lg border border-stone-700 bg-stone-900 p-8 text-center">
           <h1 className="text-xl font-serif text-rose">无法继续</h1>
           <p className="mt-3 text-stone-300">{screen.message}</p>
-          <button
-            className="mt-6 rounded bg-blood px-5 py-2 font-semibold text-white hover:bg-red-800"
-            onClick={() => setScreen({ name: 'home' })}
-          >
-            返回首页
-          </button>
+          <div className="mt-6 flex justify-center gap-3">
+            {screen.restore && (
+              <button
+                className="rounded bg-blood px-5 py-2 font-semibold text-white hover:bg-red-800"
+                onClick={() => {
+                  setScreen({ name: 'home' });
+                  setRestoreAttempt((attempt) => attempt + 1);
+                }}
+              >
+                重试恢复
+              </button>
+            )}
+            <button
+              className="rounded bg-stone-700 px-5 py-2 font-semibold text-white hover:bg-stone-600"
+              onClick={() => {
+                if (screen.restore) clearRoomSession(screen.restore.roomId);
+                setScreen({ name: 'home' });
+              }}
+            >
+              {screen.restore ? '放弃并返回首页' : '返回首页'}
+            </button>
+          </div>
         </div>
       </div>
     );

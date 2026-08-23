@@ -35,6 +35,7 @@ export interface GameClient {
   get allIdentitiesConfirmed(): boolean;
   get currentPlayerId(): string | null;
   setReady(ready: boolean): void;
+  kickPlayer(playerId: string): void;
   handleCommand(command: GameCommand): void;
   confirmIdentity(playerId?: string): void;
   startGame(): void;
@@ -44,6 +45,7 @@ export interface GameClient {
   getGameOverSnapshot(): GameOverSnapshot | null;
   getVoiceSignaling(): VoiceSignaling;
   get lastError(): string | null;
+  get lastErrorCode(): string | null;
   reconnect?(): Promise<void>;
   disconnect(): void;
 }

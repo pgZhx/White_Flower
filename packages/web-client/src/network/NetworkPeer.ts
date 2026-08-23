@@ -22,6 +22,7 @@ export interface NetworkPeerState {
   room: LobbySnapshot['payload']['roomState'] | null;
   view: ClientView | null;
   lastError: string | null;
+  lastErrorCode: string | null;
   voiceStatuses: Record<string, boolean>;
 }
 
@@ -40,6 +41,7 @@ export class NetworkPeer {
     room: null,
     view: null,
     lastError: null,
+    lastErrorCode: null,
     voiceStatuses: {},
   };
 
@@ -60,9 +62,11 @@ export class NetworkPeer {
     this._sessionId = makeSessionId();
     this.transport.onMessage((message) => this.handleMessage(message));
     this.transport.onPeerDisconnected(() => {
+      if (this.state.lastErrorCode === 'KICKED') return;
       this.state = {
         ...this.state,
         lastError: '房主已离开。当前对局无法继续。',
+        lastErrorCode: 'HOST_DISCONNECTED',
       };
       this.emit();
     });
@@ -94,6 +98,7 @@ export class NetworkPeer {
       room: null,
       view: null,
       lastError: null,
+      lastErrorCode: null,
       voiceStatuses: {},
     };
     this.pendingVoiceSignals = [];
@@ -114,7 +119,11 @@ export class NetworkPeer {
           resolve();
         } else if (this.state.lastError) {
           cleanup();
-          reject(new Error(this.state.lastError));
+          const error = new Error(this.state.lastError);
+          if (this.state.lastErrorCode) {
+            (error as Error & { code?: string }).code = this.state.lastErrorCode;
+          }
+          reject(error);
         }
       });
 
@@ -187,6 +196,7 @@ export class NetworkPeer {
         playerId: accepted.payload.playerId,
         room: accepted.payload.roomState,
         lastError: null,
+        lastErrorCode: null,
       };
       this.emit();
       return;
@@ -195,6 +205,7 @@ export class NetworkPeer {
       this.state = {
         ...this.state,
         lastError: message.payload.reason,
+        lastErrorCode: message.payload.code ?? 'JOIN_REJECTED',
       };
       this.emit();
       return;
@@ -249,6 +260,7 @@ export class NetworkPeer {
       this.state = {
         ...this.state,
         lastError: errorMessage.payload.message,
+        lastErrorCode: errorMessage.payload.code,
       };
       this.emit();
     }
@@ -257,6 +269,7 @@ export class NetworkPeer {
       this.state = {
         ...this.state,
         lastError: hostLeft.payload.message,
+        lastErrorCode: 'HOST_DISCONNECTED',
       };
       this.emit();
     }

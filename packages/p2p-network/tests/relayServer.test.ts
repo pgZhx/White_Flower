@@ -154,4 +154,47 @@ describe('relay server', () => {
 
     hostDownPeer.ws.close();
   });
+
+  it('allows the same host client to restore a room after refresh', async () => {
+    const roomId = generateRoomCode();
+    const originalHost = await registerHost(roomId);
+    const peer = await registerPeer(roomId, `peer-${roomId}`);
+    await nextMessage(originalHost.ws);
+
+    const peerSeesRefresh = nextMessage(peer.ws);
+    const restoredHost = await registerHost(roomId);
+    expect(restoredHost.reply).toMatchObject({
+      kind: 'REGISTERED',
+      role: 'host',
+      roomId,
+      clientId: `host-${roomId}`,
+    });
+    expect(await peerSeesRefresh).toMatchObject({ kind: 'HOST_DISCONNECTED' });
+
+    const restoredPeer = await registerPeer(roomId, `peer-restored-${roomId}`);
+    expect(restoredPeer.reply).toMatchObject({ kind: 'REGISTERED', role: 'peer', roomId });
+
+    restoredPeer.ws.close();
+    peer.ws.close();
+    originalHost.ws.close();
+    restoredHost.ws.close();
+  });
+
+  it('lets the host disconnect a selected peer', async () => {
+    const roomId = generateRoomCode();
+    const host = await registerHost(roomId);
+    const peerId = `kick-${roomId}`;
+    const peer = await registerPeer(roomId, peerId);
+    await nextMessage(host.ws);
+
+    const closed = new Promise<void>((resolve) => peer.ws.addEventListener('close', () => resolve(), { once: true }));
+    host.ws.send(JSON.stringify({ kind: 'DISCONNECT_PEER', peerId }));
+    await closed;
+
+    const replacement = await registerPeer(roomId, peerId);
+    expect(replacement.reply).toMatchObject({ kind: 'REGISTERED', role: 'peer', roomId, clientId: peerId });
+
+    replacement.ws.close();
+    host.ws.close();
+  });
 });
